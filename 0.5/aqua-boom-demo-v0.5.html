@@ -1,0 +1,2851 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" name="viewport"/>
+<meta content="#dfe9f2" name="theme-color"/>
+<meta content="dark light" name="color-scheme"/>
+<meta content="Головоломка «Аква-Бум: Спасти Уму»: вращай стенд из прозрачных труб во все стороны, управляй водой, льдом, кислотой и квадратными шиберами, спаси Уму. Техно-демо v0.5, уровень «Первый поток»." name="description"/>
+<meta content="yes" name="mobile-web-app-capable"/>
+<title>Аква-Бум! Спасти Уму — техно-демо v0.5</title>
+<!--
+  АКВА-БУМ! СПАСТИ УМУ · техно-демо «Первый поток» (First Flow) · v0.5
+  v0.5: 3-D inline slide-gate meshes; pipe-module constructor; water/acid fills; gradual cooler/heater controls;
+        temperature-driven water/ice/steam phases and connected-system acid hazards; stable fluid visuals and event-only audio.
+        Retains arcball rotation, transparent enlarged Pixar Glass pipes, bathysphere chambers and horizontal lab parallax.
+        Version shown in menu/help/file name.
+  Один файл, без внешних зависимостей. Canvas 2D + собственная 3D-математика (подход Мат-Бум 1).
+  Фон-окружение — процедурный «лабораторный комплекс ГидроЛаб-7» вместо космоса Мат-Бум 3 (тот же принцип: слои+параллакс вокруг арены).
+  UI-хром (звук/язык/тема/меню), внешний arcball-поворот кватернионом по принципу сферы Мат-Бум 3.
+  Физика: граф труб (PipeGraph/PipeNode/LiquidFlow по ТЗ), НЕ реальная гидродинамика. 30 Гц, детерминированно.
+  Платформы: код не противоречит правилам Яндекс Игр и VK Mini Apps:
+   - звук стоп при потере фокуса (Y 1.3 / VK pause), пауза по visibilitychange;
+   - управление жестами + мышь + клавиатура (Y 1.6.1.5, 1.6.2.4); тап-цели >= 44px (Y 1.8);
+   - нет выделения/контекстного меню на лонгтап (Y 1.6.1.8, 1.6.2.7); нет браузерного скролла (Y 1.10.2);
+   - адаптив и поворот экрана без наложений (Y 1.10); прогресс и настройки в localStorage (Y 1.9);
+   - никаких внешних URL, шрифтов и библиотек (Y 1.7; VK: HTTPS-хостинг, всё внутри index.html);
+   - нет надписей «Яндекс Игры»/«VK» в интерфейсе; реклама не встроена в поле (только точки GameplayAPI-разметки);
+   - адаптер PlatformAPI ниже: при появлении window.ysdk / VK Bridge подключит ready/gameplay/pause/resume/сохранения/язык.
+   Для публикации: положить файл в корень архива как index.html (Y 1.22), имена файлов — латиницей без пробелов.
+-->
+<style>
+/* ============ АКВА-БУМ: styles, dark+light themes, responsive ============ */
+:root{
+  --aqua:#28c4e8; --aqua2:#0e9cc4; --emerald:#3ddc84; --coral:#ff6a6a; --acid:#54e06a;
+  --ink:#173042; --mut:#5b7386;
+  --panel:rgba(255,255,255,.78); --panel-b:rgba(20,120,150,.28);
+  --bg1:#e8f2f8; --bg2:#d7e6f0; --bg3:#c3d7e4;
+  --card:linear-gradient(#ffffff,#eef7fb); --card-b:rgba(20,120,150,.45);
+  --btnbg:rgba(255,255,255,.88); --btnb:rgba(14,120,150,.45);
+  --hint:#1d4b60; --hint2:#0c7a4d; --dim:#6d8496;
+  --shadow:0 6px 18px rgba(20,60,80,.18);
+}
+[data-theme="dark"]{
+  --ink:#e6f4fa; --mut:#8fb3c4;
+  --panel:rgba(10,26,38,.72); --panel-b:rgba(40,196,232,.30);
+  --bg1:#081720; --bg2:#05101a; --bg3:#030a10;
+  --card:linear-gradient(#10283a,#081724); --card-b:rgba(40,196,232,.5);
+  --btnbg:rgba(12,34,48,.85); --btnb:rgba(40,196,232,.45);
+  --hint:#bfe6f2; --hint2:#7df0b0; --dim:#6f93a5;
+  --shadow:0 6px 18px rgba(0,0,0,.45);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{font-family:'Segoe UI',Roboto,Arial,sans-serif;color:var(--ink);user-select:none;-webkit-user-select:none;
+  -webkit-touch-callout:none;touch-action:none;
+  background:linear-gradient(var(--bg1),var(--bg2) 55%,var(--bg3));
+  display:flex;flex-direction:column}
+button{font-family:inherit;color:var(--ink);background:var(--btnbg);border:1px solid var(--btnb);
+  border-radius:12px;min-height:44px;min-width:44px;padding:8px 14px;font-size:15px;font-weight:600;
+  cursor:pointer;box-shadow:var(--shadow);transition:filter .15s,transform .12s}
+button:active{transform:scale(.96)}
+button.primary{background:linear-gradient(160deg,var(--aqua),var(--aqua2));color:#04222e;border-color:rgba(255,255,255,.5);font-size:18px}
+button.ghost{background:var(--panel);border-color:var(--panel-b)}
+button.small{min-height:40px;min-width:40px;padding:6px 9px;font-size:13px;border-radius:10px}
+@media (hover:hover){button:hover{filter:brightness(1.08)}}
+/* ---------- chrome (top bar on every screen) ---------- */
+:root{--chrome-h:50px}
+#chrome{display:flex;justify-content:center;align-items:center;gap:8px;padding:6px 12px 2px;z-index:7;height:var(--chrome-h);flex:0 0 auto}
+.chrome-c{display:flex;gap:6px;align-items:center}
+#btn-back{min-width:44px;min-height:40px;display:inline-flex;align-items:center;justify-content:center}
+.ico-btn{min-width:44px;position:relative;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.ico{width:22px;height:22px;vertical-align:middle;pointer-events:none}
+.ico-btn.off img.ico{opacity:.4}
+.mute-slash{display:none;position:absolute;left:11px;top:50%;width:22px;height:3px;background:var(--coral);
+  transform:rotate(-45deg);border-radius:2px;pointer-events:none}
+.ico-btn.off .mute-slash{display:block}
+#lang-lbl{font-weight:800;letter-spacing:.5px}
+/* ---------- screens ---------- */
+.screen{position:fixed;inset:0;display:none;z-index:5}
+.screen.on{display:flex}
+.screen-scroll{width:100%;height:100%;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+.center{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px}
+.logo{font-size:clamp(34px,9vw,64px);font-weight:900;letter-spacing:2px;text-align:center;
+  color:var(--aqua2);text-shadow:0 2px 0 #fff,0 4px 14px rgba(20,160,200,.35)}
+[data-theme="dark"] .logo{color:var(--aqua);text-shadow:0 0 18px rgba(40,196,232,.55),0 2px 3px #000}
+.h1sub{font-size:clamp(15px,2.4vw + 8px,26px);letter-spacing:5px;color:var(--hint);font-weight:700;text-align:center}
+.menu-actions{display:flex;flex-direction:column;gap:10px;width:min(86vw,340px);margin-top:8px}
+.menu-actions button{width:100%}
+.ver{font-size:11px;color:var(--dim);margin-top:10px;text-align:center}
+.scr-title{font-size:clamp(20px,4vw,30px);letter-spacing:2px;text-align:center;color:var(--hint);margin:14px 8px 6px}
+.sub{color:var(--mut);font-size:14px;text-align:center;padding:0 14px}
+.helpbox{max-width:620px;margin:6px auto 26px;background:var(--panel);border:1px solid var(--panel-b);border-radius:16px;padding:14px 16px;box-shadow:var(--shadow)}
+.helpbox h3{font-size:15px;letter-spacing:1px;color:var(--aqua2);margin:10px 0 6px}
+[data-theme="dark"] .helpbox h3{color:var(--aqua)}
+.helpbox p,.helpbox li{font-size:14px;line-height:1.5;color:var(--ink)}
+.helpbox ul{padding-left:20px}
+.chip{display:inline-block;padding:1px 8px;border-radius:8px;font-weight:700;font-size:12px;margin-right:6px}
+.chip.w{background:rgba(40,140,255,.18);color:#1668c8}
+.chip.a{background:rgba(84,224,106,.2);color:#1d9436}
+.chip.i{background:rgba(160,220,255,.25);color:#2a7fa8}
+[data-theme="dark"] .chip.w{color:#7cc4ff}
+[data-theme="dark"] .chip.a{color:#8df09c}
+[data-theme="dark"] .chip.i{color:#bfe8ff}
+/* ---------- game screen ---------- */
+#scr-game{position:fixed;inset:0;display:none;z-index:4;flex-direction:column}
+#scr-game.on{display:flex}
+#stage{position:absolute;inset:0}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#gl.grabbing{cursor:grabbing}
+#hud-top{position:absolute;top:calc(var(--chrome-h) + 2px);left:10px;right:10px;display:flex;justify-content:space-between;align-items:flex-start;z-index:6;pointer-events:none}
+#hud-top button{pointer-events:auto}
+#btn-freeze{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:64px;border-color:rgba(90,190,255,.6)}
+#btn-freeze .fl{font-size:10px;letter-spacing:1px;font-weight:800}
+#btn-freeze.hot{border-color:var(--aqua);box-shadow:0 0 14px rgba(40,196,232,.55)}
+#btn-freeze:disabled{opacity:.55}
+#freezeRing{width:26px;height:26px}
+#hint{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom,0px));
+  z-index:6;pointer-events:none;max-width:92vw;text-align:center}
+#hint1{font-size:clamp(14px,2.6vw,18px);font-weight:700;color:var(--hint);background:var(--panel);
+  border:1px solid var(--panel-b);border-radius:14px;padding:8px 16px;box-shadow:var(--shadow);display:inline-block}
+#hint1.terr{color:var(--coral)}
+#dragHint{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(108px + env(safe-area-inset-bottom,0px));
+  font-size:11px;color:var(--dim);z-index:5;pointer-events:none;text-align:center;max-width:90vw;
+  background:var(--panel);border-radius:10px;padding:3px 10px;opacity:.9}
+#ctrl{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(8px + env(safe-area-inset-bottom,0px));
+  display:flex;gap:8px;z-index:6}
+#ctrl button{min-width:54px;min-height:48px;font-size:22px;border-radius:14px}
+#ctrl button.rot:active{background:var(--aqua)}
+#bGate{font-size:19px;font-weight:900;line-height:1}
+#bGate.placing{background:linear-gradient(160deg,#ffb17a,#ff7168);color:#421811;border-color:#fff;box-shadow:0 0 15px rgba(255,113,104,.58)}
+#stats{position:absolute;top:calc(var(--chrome-h) + 52px);right:10px;z-index:6;font-size:10px;line-height:1.45;
+  color:var(--dim);background:var(--panel);border:1px solid var(--panel-b);border-radius:10px;padding:5px 8px;
+  pointer-events:auto;cursor:pointer;white-space:pre;font-family:Consolas,monospace}
+#toast{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);z-index:60;display:none;
+  background:var(--panel);border:1px solid var(--card-b);border-radius:16px;padding:12px 22px;
+  font-size:16px;font-weight:700;color:var(--hint);box-shadow:var(--shadow);text-align:center}
+/* ---------- v0.5 constructor ---------- */
+#constructorPanel{position:absolute;left:10px;top:calc(var(--chrome-h) + 50px);z-index:8;width:min(350px,calc(100vw - 20px));max-height:47vh;overflow:auto;padding:10px;border-radius:16px;background:var(--panel);border:1px solid var(--panel-b);box-shadow:var(--shadow);backdrop-filter:blur(8px);touch-action:pan-y}
+#constructorPanel[hidden]{display:none}
+.ctor-head{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--hint);font-size:13px;letter-spacing:.5px}
+#ctor-back{min-width:36px;min-height:36px;padding:4px}
+#ctor-hint{font-size:11px;line-height:1.35;color:var(--mut);padding:4px 0 7px}
+.ctor-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.ctor-grid button,.ctor-modules button{min-width:0;min-height:38px;padding:5px 4px;font-size:10px;line-height:1.15;border-radius:9px;box-shadow:none}
+.ctor-grid button.selected,.ctor-modules button.selected{outline:2px solid var(--aqua2);background:rgba(40,196,232,.28)}
+.ctor-grid button[data-ctor-tool="cooler"]{border-color:#3b9cff}
+.ctor-grid button[data-ctor-tool="heater"]{border-color:#ff6b55}
+.ctor-modules{display:flex;gap:5px;margin-top:6px}
+.ctor-modules[hidden]{display:none}
+.ctor-modules button{flex:1}
+.ctor-actions{display:flex;gap:7px;margin-top:7px}
+.ctor-actions button{flex:1;min-height:36px;padding:5px 8px;font-size:11px;box-shadow:none}
+#scr-game.constructor-mode #btn-freeze,#scr-game.constructor-mode #hint,#scr-game.constructor-mode #dragHint,#scr-game.constructor-mode #bGate{display:none!important}
+#scr-game.constructor-mode #stats{display:none!important}
+@media(max-width:560px){#constructorPanel{top:calc(var(--chrome-h) + 46px);max-height:42vh;width:min(330px,calc(100vw - 18px));left:9px}.ctor-grid button{font-size:9px}}
+/* ---------- pipe modules screen (v0.5) ---------- */
+.mods-sub{max-width:680px;margin:0 auto 12px;text-align:center;font-size:13px;line-height:1.5;color:var(--ink);opacity:.85}
+.mods-statebar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:0 auto 14px;max-width:680px}
+.mods-statebar button{padding:7px 13px;font-size:12px;border-radius:999px;display:inline-flex;align-items:center;gap:7px}
+.mods-statebar button .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.mods-statebar button.on{background:var(--aqua);color:#fff;border-color:transparent;box-shadow:var(--shadow)}
+.mods-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:780px;margin:0 auto 24px}
+@media(min-width:780px){.mods-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.mod-cell{background:var(--panel);border:1px solid var(--panel-b);border-radius:14px;padding:8px 10px 7px;box-shadow:var(--shadow)}
+.mod-cell canvas{width:100%;height:auto;display:block;border-radius:10px}
+.mod-cell .mname{font-size:12px;font-weight:700;color:var(--ink);margin-top:6px}
+.mod-cell .mmeta{font-size:10px;color:var(--ink);opacity:.7}
+/* ---------- overlays ---------- */
+.overlay{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;
+  background:rgba(6,20,30,.45);backdrop-filter:blur(3px)}
+.overlay.on{display:flex}
+.obox{background:var(--card);border:1px solid var(--card-b);border-radius:20px;padding:22px 24px;
+  width:min(92vw,420px);text-align:center;box-shadow:var(--shadow);max-height:92vh;overflow-y:auto}
+.obox h1{font-size:clamp(22px,5vw,32px);letter-spacing:2px;margin-bottom:8px;color:var(--hint)}
+.obox p{font-size:14px;color:var(--mut);margin:4px 0}
+.obox .btns{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+#umaWin{width:150px;height:150px;margin:2px auto}
+.reward{display:inline-block;margin-top:6px;padding:6px 14px;border-radius:12px;font-weight:800;font-size:14px;
+  background:linear-gradient(160deg,rgba(40,196,232,.25),rgba(61,220,132,.25));border:1px solid var(--card-b);color:var(--hint)}
+@keyframes pop{0%{transform:scale(.7);opacity:0}70%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+.overlay.on .obox{animation:pop .3s ease-out}
+@keyframes shakeS{0%,100%{transform:translate(0)}25%{transform:translate(-4px,2px)}50%{transform:translate(4px,-2px)}75%{transform:translate(-3px,-1px)}}
+.shakeS{animation:shakeS .3s linear}
+</style>
+</head>
+<body>
+
+<div id="chrome">
+  <div class="chrome-c">
+    <button class="ghost small" id="btn-back" hidden type="button"></button>
+    <button class="ghost small ico-btn" id="btn-sound" type="button"><span class="mute-slash"></span></button>
+    <button class="ghost small ico-btn" id="btn-lang" type="button"><span id="lang-lbl">EN</span></button>
+    <button class="ghost small ico-btn" id="btn-theme" type="button"></button>
+  </div>
+</div>
+
+<section class="screen on" id="scr-start"><div class="screen-scroll"><div class="center">
+  <div class="logo" id="m-logo">АКВА-БУМ!</div>
+  <div class="h1sub" id="m-sub">СПАСТИ УМУ</div>
+  <div class="menu-actions">
+    <button class="primary" id="b-play" type="button"></button>
+    <button id="b-constructor" type="button"></button>
+    <button id="b-help" type="button"></button>
+    <button id="b-mods" type="button"></button>
+  </div>
+  <p class="ver" id="m-ver"></p>
+</div></div></section>
+
+<section class="screen" id="scr-help"><div class="screen-scroll">
+  <h2 class="scr-title" id="help-title">КАК ИГРАТЬ</h2>
+  <div class="helpbox" id="help-body"></div>
+  <p class="ver" id="help-footer" style="text-align:center"></p>
+</div></section>
+
+<section class="screen" id="scr-mods"><div class="screen-scroll">
+  <h2 class="scr-title" id="mods-title"></h2>
+  <p class="mods-sub" id="mods-sub"></p>
+  <div class="mods-statebar" id="mods-bar"></div>
+  <div class="mods-grid" id="mods-grid"></div>
+  <p class="ver" id="mods-footer" style="text-align:center"></p>
+</div></section>
+
+<section id="scr-game">
+  <div id="shaker" style="display:contents">
+    <div id="stage"><canvas id="gl"></canvas></div>
+    <aside id="constructorPanel" hidden aria-label="Constructor">
+      <div class="ctor-head"><strong id="ctor-title"></strong><button class="small ghost" id="ctor-back" type="button" aria-label="Back">←</button></div>
+      <p id="ctor-hint"></p>
+      <div class="ctor-grid" id="ctor-tools">
+        <button type="button" data-ctor-tool="pipe"></button>
+        <button type="button" data-ctor-tool="water"></button>
+        <button type="button" data-ctor-tool="acid"></button>
+        <button type="button" data-ctor-tool="empty"></button>
+        <button type="button" data-ctor-tool="gate"></button>
+        <button type="button" data-ctor-tool="cooler"></button>
+        <button type="button" data-ctor-tool="heater"></button>
+      </div>
+      <div class="ctor-modules" id="ctor-modules">
+        <button type="button" data-part="straight"></button>
+        <button type="button" data-part="elbow"></button>
+        <button type="button" data-part="tee"></button>
+        <button type="button" data-part="loop"></button>
+      </div>
+      <div class="ctor-actions">
+        <button class="primary small" id="ctor-test" type="button"></button>
+        <button class="ghost small" id="ctor-clear" type="button"></button>
+      </div>
+    </aside>
+    <div id="hud-top">
+      <button class="ghost" id="btn-restart" type="button" title="Restart"></button>
+      <button class="ghost" id="btn-freeze" type="button">
+        <svg id="freezeRing" viewBox="0 0 26 26"><circle cx="13" cy="13" r="10" fill="none" stroke="rgba(120,200,255,.25)" stroke-width="3"/><circle id="freezeArc" cx="13" cy="13" r="10" fill="none" stroke="#5ac8ff" stroke-width="3" stroke-linecap="round" stroke-dasharray="62.8" stroke-dashoffset="0" transform="rotate(-90 13 13)"/></svg>
+        <span class="fl" id="freezeLbl">FREEZE</span>
+      </button>
+    </div>
+    <div id="stats" hidden></div>
+    <div id="dragHint"></div>
+    <div id="hint"><div id="hint1"></div></div>
+    <div id="ctrl" aria-label="Управление видом">
+      <button class="rot ghost" id="bZoomOut" type="button" aria-label="Уменьшить">−</button>
+      <button class="rot ghost" id="bReset" type="button" aria-label="Сбросить вращение">↺</button>
+      <button class="rot ghost" id="bZoomIn" type="button" aria-label="Увеличить">+</button>
+      <button class="rot ghost gate-tool" id="bGate" type="button" aria-label="Установить квадратный шибер" aria-pressed="false">▤</button>
+    </div>
+  </div>
+</section>
+
+<div class="overlay" id="ov-pause"><div class="obox">
+  <h1 id="p-title">ПАУЗА</h1>
+  <div class="btns">
+    <button id="p-resume"></button>
+    <button class="ghost" id="p-help"></button>
+    <button class="ghost" id="p-exit"></button>
+  </div>
+  <p class="sub" id="p-keys" style="margin-top:10px;font-size:11px"></p>
+</div></div>
+
+<div class="overlay" id="ov-win"><div class="obox">
+  <h1 id="w-title">УМА СПАСЕНА!</h1>
+  <canvas id="umaWin" width="150" height="150"></canvas>
+  <p id="w-time"></p>
+  <div class="reward" id="w-reward"></div>
+  <div class="btns">
+    <button id="w-again"></button>
+    <button class="primary" id="w-next"></button>
+    <button class="ghost" id="w-menu"></button>
+  </div>
+</div></div>
+
+<div class="overlay" id="ov-lose"><div class="obox">
+  <h1 id="l-title" style="color:var(--acid)">УМА В КИСЛОТЕ!</h1>
+  <canvas id="umaLose" width="150" height="150" style="width:150px;height:150px;margin:2px auto"></canvas>
+  <p id="l-sub"></p>
+  <div class="btns">
+    <button class="primary" id="l-retry"></button>
+    <button class="ghost" id="l-menu"></button>
+  </div>
+</div></div>
+
+<div id="toast"></div>
+
+<script>
+/* ===== pipes-lib v0.5 · модули труб style_01 «Pixar Glass» =====
+   Тот же код рисует трубы в игре и в наборе модулей (меню → «МОДУЛИ ТРУБ»). */
+/* =====================================================================
+   АКВА-БУМ · БИБЛИОТЕКА МОДУЛЕЙ ТРУБ — style_01 «Pixar Glass» (v0.5)
+   Единый код для игры (Canvas 2D) и для набора ассетов (node-canvas).
+   Модули: прямые S/M/L, угол 90°, тройник, крестовина, муфта, торец,
+   заглушка, U-ловушка. Состояния: пусто/вода/кислота/лёд/пар/сюрприз.
+   Геометрия — в метрах, Y вверх; рендер — в экранных px (Y вниз).
+   ===================================================================== */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.PLIB = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  /* ------------------------- утилиты ------------------------- */
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function hashSeed(s) {
+    let h = 2166136261;
+    if (typeof s === 'number') h ^= s | 0;
+    else { s = String(s == null ? 'p' : s); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } }
+    return h >>> 0;
+  }
+  function roundPoly(pts, r, segs) {
+    segs = segs || 6;
+    if (!r || pts.length < 3) return pts.slice();
+    const out = [pts[0]];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1], p1 = pts[i], p2 = pts[i + 1];
+      const v1 = [p0[0] - p1[0], p0[1] - p1[1]], v2 = [p2[0] - p1[0], p2[1] - p1[1]];
+      const l1 = Math.hypot(v1[0], v1[1]) || 1, l2 = Math.hypot(v2[0], v2[1]) || 1;
+      const rr = Math.min(r, l1 * 0.5, l2 * 0.5);
+      const a = [p1[0] + v1[0] / l1 * rr, p1[1] + v1[1] / l1 * rr];
+      const b = [p1[0] + v2[0] / l2 * rr, p1[1] + v2[1] / l2 * rr];
+      out.push(a);
+      for (let s = 1; s <= segs; s++) {
+        const tt = s / segs, mt = 1 - tt;
+        out.push([mt * mt * a[0] + 2 * mt * tt * p1[0] + tt * tt * b[0],
+                  mt * mt * a[1] + 2 * mt * tt * p1[1] + tt * tt * b[1]]);
+      }
+    }
+    out.push(pts[pts.length - 1]);
+    return out;
+  }
+  function polyPointAt(pts, t) { /* t in [0,1] по длине */
+    let L = 0; const seg = [];
+    for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); seg.push(d); L += d; }
+    let want = t * L;
+    for (let i = 0; i < seg.length; i++) {
+      if (want <= seg[i] || i === seg.length - 1) {
+        const k = seg[i] ? want / seg[i] : 0;
+        return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k];
+      }
+      want -= seg[i];
+    }
+    return pts[pts.length - 1];
+  }
+  function polyNormalAt(pts, t) {
+    const a = polyPointAt(pts, Math.max(0, t - 0.02)), b = polyPointAt(pts, Math.min(1, t + 0.02));
+    const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+    return [-dy / l, dx / l];
+  }
+  function cutBelow(paths, y) { /* части полилиний НИЖЕ уровня y (y вниз) */
+    const runs = [];
+    for (const pts of paths) {
+      let cur = null;
+      const openRun = (p) => { cur = [p]; runs.push(cur); };
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const da = a[1] - y, db = b[1] - y;
+        if (da > 0 && db > 0) { if (!cur) openRun(a); cur.push(b); }
+        else if (da > 0 && db <= 0) { if (!cur) openRun(a); const k = da / (da - db); cur.push([a[0] + (b[0] - a[0]) * k, y]); cur = null; }
+        else if (da <= 0 && db > 0) { const k = -da / (db - da); openRun([a[0] + (b[0] - a[0]) * k, y]); cur.push(b); }
+        else cur = null;
+      }
+    }
+    return runs.filter(r => r.length > 1);
+  }
+  function cutBelowLine(pts, A, B) { /* часть полилинии ниже (по знаку) прямой A→B в экранных координатах */
+    const side = (p) => (B[0] - A[0]) * (p[1] - A[1]) - (B[1] - A[1]) * (p[0] - A[0]);
+    /* выбираем знак «погружённой» стороны по наиболее низкой точке полилинии */
+    let lo = pts[0];
+    for (const p of pts) if (p[1] > lo[1]) lo = p;
+    const sgn = Math.sign(side(lo)) || 1;
+    const runs = []; let cur = null;
+    const openRun = (p) => { cur = [p]; runs.push(cur); };
+    const inter = (a, b) => { const sa = side(a) * sgn, sb = side(b) * sgn; const k = sa / (sa - sb); return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]; };
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1], da = side(a) * sgn, db = side(b) * sgn;
+      if (da > 0 && db > 0) { if (!cur) openRun(a); cur.push(b); }
+      else if (da > 0 && db <= 0) { if (!cur) openRun(a); cur.push(inter(a, b)); cur = null; }
+      else if (da <= 0 && db > 0) { openRun(inter(a, b)); cur.push(b); }
+      else cur = null;
+    }
+    return runs.filter(r => r.length > 1);
+  }
+  function bbox(pts) {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const p of pts) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    return [x0, y0, x1, y1];
+  }
+  function strokePoly(ctx, pts, w, style, alpha) {
+    if (!pts || pts.length < 2) return;
+    ctx.save();
+    ctx.globalAlpha = (alpha == null ? 1 : alpha);
+    ctx.strokeStyle = style; ctx.lineWidth = Math.max(0.6, w);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.stroke(); ctx.restore();
+  }
+  function offset(pts, dx, dy) { return pts.map(p => [p[0] + dx, p[1] + dy]); }
+  function offsetNormal(pts, d) { /* сдвиг вдоль локальной нормали трубы */
+    return pts.map((p, i) => {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+      const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
+      return [p[0] - dy / l * d, p[1] + dx / l * d];
+    });
+  }
+
+  /* ------------------------- палитры ------------------------- */
+  const THEMES = {
+    light: {
+      outline: 'rgba(146,186,214,0.92)',
+      casingTop: '#F6FCFF', casingMid: '#E3F1FD', casingBot: '#C2DFF4',
+      casingAlpha: 0.31,
+      wall: 'rgba(255,255,255,0.36)',
+      channel: 'rgba(222,242,255,0.28)',
+      glossHi: 'rgba(255,255,255,0.95)', glossLo: 'rgba(255,255,255,0.40)',
+      shadow: 'rgba(74,124,162,0.20)',
+      rim: '#FFFFFF', rimShade: 'rgba(178,209,231,0.98)', rimInner: 'rgba(236,249,255,0.96)',
+      water: { a: '#A6E2FF', b: '#2E9BF0', core: 'rgba(26,116,196,0.35)', crest: 'rgba(255,255,255,0.95)', bubble: 'rgba(255,255,255,0.85)' },
+      acid:  { a: '#D2FCA0', b: '#2FBF5F', core: 'rgba(22,126,62,0.35)', crest: 'rgba(248,255,230,0.95)', bubble: 'rgba(240,255,220,0.9)' },
+      ice:   { a: '#FBFEFF', b: '#A8DCFB', core: 'rgba(112,178,226,0.42)', crest: 'rgba(255,255,255,1)', bubble: 'rgba(255,255,255,0.97)' },
+      steam: { a: 'rgba(255,255,255,0.99)', b: 'rgba(255,219,236,0.95)', core: 'rgba(255,186,216,0.4)', crest: 'rgba(255,255,255,1)', bubble: 'rgba(255,255,255,0.95)' },
+      surprise: { a: '#FFFEF8', b: '#F3E2C4', core: 'rgba(196,160,100,0.25)', mark: '#F0B23F', markInk: '#B9761F', ribbon: '#F2A63B' }
+    },
+    dark: {
+      outline: 'rgba(126,196,232,0.55)',
+      casingTop: 'rgba(240,252,255,0.42)', casingMid: 'rgba(196,231,250,0.30)', casingBot: 'rgba(150,200,232,0.22)',
+      casingAlpha: 1,
+      wall: 'rgba(190,230,250,0.20)',
+      channel: 'rgba(14,38,56,0.28)',
+      glossHi: 'rgba(255,255,255,0.50)', glossLo: 'rgba(255,255,255,0.18)',
+      shadow: 'rgba(0,0,0,0.35)',
+      rim: 'rgba(232,248,255,0.95)', rimShade: 'rgba(120,180,215,0.9)', rimInner: 'rgba(24,58,80,0.9)',
+      water: { a: '#7ED0FF', b: '#1E7FD6', core: 'rgba(6,40,80,0.45)', crest: 'rgba(230,248,255,0.9)', bubble: 'rgba(220,245,255,0.75)' },
+      acid:  { a: '#B9F288', b: '#1FA24E', core: 'rgba(6,60,30,0.45)', crest: 'rgba(240,255,224,0.9)', bubble: 'rgba(230,255,210,0.75)' },
+      ice:   { a: '#EAF9FF', b: '#9FD3F5', core: 'rgba(60,120,170,0.4)', crest: 'rgba(255,255,255,0.95)', bubble: 'rgba(255,255,255,0.85)' },
+      steam: { a: 'rgba(255,255,255,0.85)', b: 'rgba(255,196,222,0.7)', core: 'rgba(255,170,205,0.3)', crest: 'rgba(255,255,255,0.95)', bubble: 'rgba(255,255,255,0.8)' },
+      surprise: { a: '#FDF7EA', b: '#E7D2AC', core: 'rgba(150,116,64,0.3)', mark: '#F0B23F', markInk: '#A8671A', ribbon: '#F2A63B' }
+    }
+  };
+
+  /* ------------------------- модули (метры, Y вверх) ------------------------- */
+  /* paths — полилинии осевой линии; sf — уровень жидкости (м, Y вверх)     */
+  const MODULES = [
+    { id: 'straightS', ru: 'Прямая S', en: 'Straight S', size: '0.5 м', sizeM: 0.5, paths: [[[0, 0], [0.5, 0]]], sf: 0.004, ports: 2 },
+    { id: 'straightM', ru: 'Прямая M', en: 'Straight M', size: '1.0 м', sizeM: 1.0, paths: [[[0, 0], [1.0, 0]]], sf: 0.004, ports: 2 },
+    { id: 'straightL', ru: 'Прямая L', en: 'Straight L', size: '1.5 м', sizeM: 1.5, paths: [[[0, 0], [1.5, 0]]], sf: 0.004, ports: 2 },
+    { id: 'elbow', ru: 'Угол 90°', en: 'Elbow 90°', size: 'r 0.12 м', sizeM: 0.5, paths: [[[0, 0], [0.5, 0], [0.5, 0.5]]], sf: 0.0, ports: 2, rc: 0.12 },
+    { id: 'tee', ru: 'Тройник', en: 'Tee', size: '0.5 × 0.5', sizeM: 0.5, paths: [[[-0.25, 0], [0.25, 0]], [[0, 0], [0, 0.5]]], sf: 0.02, ports: 3 },
+    { id: 'cross', ru: 'Крестовина', en: 'Cross', size: '0.5 × 0.5', sizeM: 0.5, paths: [[[-0.25, 0], [0.25, 0]], [[0, -0.25], [0, 0.25]]], sf: 0.03, ports: 4 },
+    { id: 'coupling', ru: 'Муфта', en: 'Coupling', size: '0.25 м', sizeM: 0.25, paths: [[[-0.25, 0], [0.25, 0]]], sf: 0.004, ports: 2, collars: [{ t: 0.5, k: 1.55 }] },
+    { id: 'end', ru: 'Торец', en: 'Open end', size: '0.5 м', sizeM: 0.5, paths: [[[-0.25, 0], [0.25, 0]]], sf: 0.004, ports: 1, endRim: true },
+    { id: 'cap', ru: 'Заглушка', en: 'Cap', size: '0.5 м', sizeM: 0.5, paths: [[[-0.5, 0], [0.1, 0]]], sf: 0.004, ports: 1, capAt: 0.1 },
+    { id: 'utrap', ru: 'U-ловушка', en: 'U-trap', size: '0.5 × 0.5', sizeM: 0.5, paths: [[[-0.25, 0.25], [-0.25, -0.25], [0.25, -0.25], [0.25, 0.25]]], sf: 0.01, ports: 2, rc: 0.12 }
+  ];
+  const MOD_BY_ID = {}; MODULES.forEach(m => MOD_BY_ID[m.id] = m);
+
+  const STATES = ['empty', 'water', 'acid', 'ice', 'steam', 'surprise'];
+  const STATE_RU = { empty: 'Пусто', water: 'Вода', acid: 'Кислота', ice: 'Лёд', steam: 'Пар', surprise: 'Сюрприз' };
+  const STATE_EN = { empty: 'Empty', water: 'Water', acid: 'Acid', ice: 'Ice', steam: 'Steam', surprise: 'Surprise' };
+  const STATE_COL = { empty: '#8FA6B8', water: '#2E9BF0', acid: '#2FBF5F', ice: '#9FD3F5', steam: '#F1A7C4', surprise: '#E8A33D' };
+
+  /* геометрия модуля -> экранные px (Y вниз), центр (0,0) */
+  function modGeometry(id, st) {
+    st = st || {};
+    const m = MOD_BY_ID[id];
+    const scale = st.scale || 160;              /* px на метр (длины) */
+    const wOut = st.wOut || Math.max(20, scale * 0.167);
+    const wIn = st.wIn || wOut * 0.76;
+    const rc = (st.rc != null ? st.rc : (m.rc || 0)) * scale;
+    const paths = m.paths.map(p => {
+      const pp = p.map(q => [q[0] * scale, -q[1] * scale]);
+      return roundPoly(pp, rc, 7);
+    });
+    /* центрирование */
+    const all = paths.flat();
+    const bb = bbox(all);
+    const cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2;
+    const cpaths = paths.map(p => offset(p, -cx, -cy));
+    const extras = { collars: [], cap: null, endRim: null };
+    const surfY = -m.sf * scale - cy;
+    if (m.collars) for (const c of m.collars) {
+      const p = cpaths[0];
+      const q = polyPointAt(p, c.t);
+      extras.collars.push({ p: q, w: wOut * (c.k || 1.5) });
+    }
+    if (m.capAt != null) {
+      const p = cpaths[0];
+      const q = polyPointAt(p, 1);
+      extras.cap = { p: q, dir: [1, 0] };
+    }
+    if (m.endRim) { const p = cpaths[0]; extras.endRim = { p: polyPointAt(p, 1) }; }
+    return { paths: cpaths, wOut, wIn, surfY, extras, bb: bbox(cpaths.flat()) };
+  }
+
+  /* ------------------------- рендер трубы ------------------------- */
+  /* o = { pts, wOut, wIn, state, runs, t, seed, dark, rims:bool, hidden:bool } */
+  function drawTube(ctx, o) {
+    const th = THEMES[o.dark ? 'dark' : 'light'];
+    const pts = o.pts; if (!pts || pts.length < 2) return;
+    const wOut = o.wOut, wIn = o.wIn == null ? wOut * 0.76 : o.wIn;
+    const st = o.state || 'empty';
+    const t = o.t || 0, rnd = mulberry32(hashSeed(o.seed));
+    const bb = bbox(pts);
+
+    /* Pass 2: liquids are composited after every glass wall/joint so no connector
+       or crossing tube can hide the continuous stream. The narrower wIn keeps the
+       outer tube contour visible. */
+    if (o.liquidOnly) {
+      if (st === 'steam') {
+        const runs = o.runs && o.runs.length ? o.runs : [{pts}];
+        for (const run of runs) drawSteamBody(ctx, run.pts || run, wIn, th, t, rnd, o);
+      }
+      else if (st !== 'surprise' && st !== 'empty' && o.runs && o.runs.length) {
+        const col = o.color || th[st] || th.water;
+        for (const run of o.runs) drawLiquidRun(ctx, run, wIn, col, th, t, rnd, st, bb);
+      }
+      return;
+    }
+
+    /* 1. тень */
+    strokePoly(ctx, offset(pts, wOut * 0.06, wOut * 0.30), wOut * 1.0, th.shadow, o.dark ? 0.5 : 0.75);
+    /* 2. белая граница (контур) */
+    strokePoly(ctx, pts, wOut + Math.max(3, wOut * 0.15), th.outline, 0.95);
+    /* 3. стеклянная оболочка */
+    const cg = ctx.createLinearGradient(0, bb[1] - wOut * 0.6, 0, bb[3] + wOut * 0.6);
+    if (st === 'surprise') {
+      cg.addColorStop(0, th.surprise.a); cg.addColorStop(1, th.surprise.b);
+      strokePoly(ctx, pts, wOut, cg, 1);
+    } else {
+      cg.addColorStop(0, th.casingTop); cg.addColorStop(0.42, th.casingMid); cg.addColorStop(1, th.casingBot);
+      strokePoly(ctx, pts, wOut, cg, th.casingAlpha);
+    }
+    /* 4. канал */
+    if (st === 'surprise') {
+      const sg = ctx.createLinearGradient(0, bb[1], 0, bb[3]);
+      sg.addColorStop(0, '#FFFDF6'); sg.addColorStop(1, '#EFD9B4');
+      strokePoly(ctx, pts, wIn, sg, 1);
+    } else {
+      strokePoly(ctx, pts, (wIn + wOut) / 2, th.wall, 0.9);
+      strokePoly(ctx, pts, wIn, th.channel, 0.9);
+    }
+
+    /* 5. содержимое (в игровом кадре приходит отдельным верхним проходом) */
+    if (!o.skipLiquid) {
+      if (st === 'steam') {
+        const runs = o.runs && o.runs.length ? o.runs : [{pts}];
+        for (const run of runs) drawSteamBody(ctx, run.pts || run, wIn, th, t, rnd, o);
+      }
+      else if (st !== 'surprise' && st !== 'empty' && o.runs && o.runs.length) {
+        const col = o.color || th[st] || th.water;
+        for (const run of o.runs) drawLiquidRun(ctx, run, wIn, col, th, t, rnd, st, bb);
+      }
+    }
+
+    /* 6. блики стекла — по нормали, чтобы не закрывать жидкость вертикальных труб */
+    strokePoly(ctx, offsetNormal(pts, -wOut * 0.27), wOut * 0.20, th.glossHi, 0.9);
+    strokePoly(ctx, offsetNormal(pts, -wOut * 0.05), wOut * 0.07, th.glossLo, 0.85);
+    strokePoly(ctx, offsetNormal(pts, wOut * 0.24), wOut * 0.10, th.glossLo, 0.55);
+
+    /* 7. сюрприз: «?» и бант (поверх непрозрачного корпуса) */
+    if (st === 'surprise') {
+      const c = polyPointAt(pts, 0.5), n = polyNormalAt(pts, 0.5);
+      const r = wOut * 0.40;
+      ctx.save();
+      ctx.fillStyle = '#E39A2B'; ctx.beginPath(); ctx.arc(c[0], c[1], r * 1.14, 0, 7); ctx.fill();
+      ctx.fillStyle = '#FFF6DE'; ctx.beginPath(); ctx.arc(c[0], c[1], r, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = Math.max(1.6, wOut * 0.055); ctx.stroke();
+      ctx.fillStyle = '#B9761F'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '700 ' + (r * 1.7).toFixed(1) + 'px sans-serif';
+      ctx.fillText('?', c[0], c[1] + r * 0.10);
+      ctx.restore();
+      /* бант */
+      ctx.save();
+      const q = polyPointAt(pts, 0.5);
+      ctx.translate(q[0] + n[0] * wOut * 0.55, q[1] + n[1] * wOut * 0.55);
+      ctx.fillStyle = th.surprise.ribbon;
+      ctx.beginPath(); ctx.ellipse(-r * 0.36, 0, r * 0.34, r * 0.20, -0.5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(r * 0.36, 0, r * 0.34, r * 0.20, 0.5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.16, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+
+    /* 8. торцевые кольца-муфты (true/false или [голова, хвост]) */
+    const rims = o.rims === false ? [false, false] : (Array.isArray(o.rims) ? o.rims : [true, true]);
+    if (rims[0]) collar(ctx, pts[0], angleAt(pts, 0), wOut, th);
+    if (rims[1]) collar(ctx, pts[pts.length - 1], angleAt(pts, 1), wOut, th);
+    /* доп. муфты */
+    if (o.collars) for (const c of o.collars) collar(ctx, c.p, c.ang || 0, c.w || wOut, th);
+  }
+
+  function angleAt(pts, t) {
+    const a = polyPointAt(pts, Math.max(0, t - 0.03)), b = polyPointAt(pts, Math.min(1, t + 0.03));
+    return Math.atan2(b[1] - a[1], b[0] - a[0]);
+  }
+
+  function collar(ctx, p, ang, wOut, th, k) {
+    /* Прозрачная кромка стыка: только две стеклянные обводки, без заливки канала. */
+    k = k || 1;
+    ctx.save();
+    ctx.translate(p[0], p[1]); ctx.rotate(ang);
+    const rx = wOut * 0.21 * k, ry = wOut * (0.63 + 0.08 * (k - 1));
+    ctx.lineWidth = Math.max(1.1, wOut * 0.055);
+    ctx.strokeStyle = th.rimShade;
+    ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = Math.max(0.8, wOut * 0.028);
+    ctx.strokeStyle = 'rgba(255,255,255,0.82)';
+    ctx.beginPath(); ctx.ellipse(0, 0, rx * 0.72, ry * 0.78, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawLiquidRun(ctx, run, wIn, col, th, t, rnd, st, bb) {
+    const pts = run.pts || run;
+    if (!pts || pts.length < 2) return;
+    const lg = ctx.createLinearGradient(0, bb[1], 0, bb[3] + wIn * 0.6);
+    lg.addColorStop(0, col.a); lg.addColorStop(1, col.b);
+    const iceFill = st === 'ice';
+    strokePoly(ctx, pts, wIn * 0.96, lg, iceFill ? 1 : 0.96);
+    strokePoly(ctx, pts, wIn * 0.52, col.core, iceFill ? 0.9 : 0.8);
+    if (iceFill) {
+      /* морозная шапка вдоль верха сегмента */
+      strokePoly(ctx, offset(pts, 0, -wIn * 0.24), wIn * 0.30, 'rgba(255,255,255,0.92)', 0.95);
+      strokePoly(ctx, offset(pts, 0, -wIn * 0.22), wIn * 0.10, 'rgba(214,240,255,0.95)', 0.9);
+    }
+    /* поверхность: волна + гребень */
+    const surfaces = run.surfs || (run.surf != null ? [run.surf] : []);
+    for (const surfaceT of surfaces) {
+      const sp = polyPointAt(pts, surfaceT);
+      const n = polyNormalAt(pts, surfaceT);
+      const width = wIn * 0.86;
+      ctx.save();
+      ctx.strokeStyle = col.crest; ctx.lineWidth = Math.max(1.4, wIn * 0.10); ctx.lineCap = 'round';
+      ctx.beginPath();
+      const px = -n[1], py = n[0];
+      const stableFluid = st === 'water' || st === 'acid';
+      const ph = stableFluid ? 0 : (t * 2.2 + (run.ph || 0) + surfaceT * 4);
+      for (let i = 0; i <= 12; i++) {
+        const u = i / 12 - 0.5;
+        const wob = stableFluid ? 0 : (Math.sin(u * 6.0 + ph) * wIn * 0.07 + Math.sin(u * 11.0 - ph * 1.4) * wIn * 0.03);
+        const X = sp[0] + px * u * width + n[0] * wob, Y = sp[1] + py * u * width + n[1] * wob;
+        i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
+      }
+      ctx.stroke(); ctx.restore();
+      const cg = ctx.createRadialGradient(sp[0], sp[1], 0, sp[0], sp[1], wIn * 0.75);
+      cg.addColorStop(0, 'rgba(255,255,255,0.45)'); cg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.save(); ctx.globalAlpha = 0.85; ctx.fillStyle = cg;
+      ctx.beginPath(); ctx.arc(sp[0], sp[1], wIn * 0.75, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+    /* Water and acid use stable, clean fills; no continuously bobbing bubble layer. */
+    const nb = (st === 'water' || st === 'acid') ? 0 : Math.max(2, Math.round(pts.length * 0.55));
+    for (let i = 0; i < nb; i++) {
+      const u = 0.06 + rnd() * 0.88;
+      const cnt = polyPointAt(pts, u), nrm = polyNormalAt(pts, u);
+      const off = (rnd() - 0.5) * wIn * 0.55;
+      const bob = Math.sin(t * 1.7 + rnd() * 6.28) * wIn * 0.10;
+      const r = Math.min(wIn * (0.06 + rnd() * 0.09), 9);
+      const X = cnt[0] + nrm[0] * (off + bob), Y = cnt[1] + nrm[1] * (off + bob);
+      ctx.save();
+      ctx.fillStyle = col.bubble; ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
+      ctx.globalAlpha = 0.95; ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = Math.max(0.8, r * 0.28);
+      ctx.beginPath(); ctx.arc(X, Y, r * 0.72, Math.PI * 1.05, Math.PI * 1.75); ctx.stroke();
+      ctx.restore();
+    }
+    /* лёд: грани кристаллов + морозная крошка */
+    if (st === 'ice') {
+      ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = Math.max(1.4, wIn * 0.075);
+      const n = Math.max(5, Math.round(pts.length * 1.1));
+      for (let i = 0; i < n; i++) {
+        const u = 0.04 + (i + rnd() * 0.6) / n;
+        const c = polyPointAt(pts, u), nm = polyNormalAt(pts, u);
+        const s = Math.min(wIn * (0.22 + rnd() * 0.24), 17);
+        const a = rnd() * Math.PI;
+        ctx.globalAlpha = 0.55 + rnd() * 0.4;
+        ctx.beginPath();
+        ctx.moveTo(c[0] - Math.cos(a) * s, c[1] - Math.sin(a) * s);
+        ctx.lineTo(c[0] + Math.cos(a) * s, c[1] + Math.sin(a) * s);
+        ctx.stroke();
+      }
+      /* морозная крошка */
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      for (let i = 0; i < Math.max(4, n); i++) {
+        const u = 0.05 + rnd() * 0.9;
+        const c = polyPointAt(pts, u), nm = polyNormalAt(pts, u);
+        const off = (rnd() - 0.5) * wIn * 0.5;
+        ctx.globalAlpha = 0.5 + rnd() * 0.5;
+        ctx.beginPath();
+        ctx.arc(c[0] + nm[0] * off, c[1] + nm[1] * off, Math.min(wIn * 0.05, 3.4), 0, 7);
+        ctx.fill();
+      }
+      ctx.restore();
+      /* искры */
+      ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      for (let i = 0; i < 3; i++) {
+        const u = 0.2 + rnd() * 0.6, c = polyPointAt(pts, u), nm = polyNormalAt(pts, u);
+        const r = Math.min(wIn * 0.05, 4), X = c[0] + nm[0] * wIn * 0.2, Y = c[1] + nm[1] * wIn * 0.2;
+        ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 3 + i * 2);
+        ctx.beginPath(); ctx.arc(X, Y, r, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawSteamBody(ctx, pts, wIn, th, t, rnd, o) {
+    const col = th.steam;
+    /* лёгкая дымка внутри */
+    strokePoly(ctx, pts, wIn * 0.9, 'rgba(255,231,243,0.75)', 0.85);
+    strokePoly(ctx, pts, wIn * 0.95, col.b, 0.55);
+    const n = Math.max(6, Math.round(pts.length * 1.2));
+    for (let i = 0; i < n; i++) {
+      const u = (i + rnd() * 0.4) / n;
+      const c = polyPointAt(pts, u), nm = polyNormalAt(pts, u);
+      const off = (rnd() - 0.5) * wIn * 0.4;
+      const r = Math.min(wIn * (0.30 + rnd() * 0.26), 26);
+      const drift = Math.sin(t * 0.9 + rnd() * 6.28) * wIn * 0.12;
+      const X = c[0] + nm[0] * (off + drift), Y = c[1] + nm[1] * (off + drift);
+      const g = ctx.createRadialGradient(X, Y, 0, X, Y, r * 1.6);
+      g.addColorStop(0, col.a); g.addColorStop(0.55, 'rgba(255,240,248,0.75)'); g.addColorStop(1, 'rgba(255,240,248,0)');
+      ctx.save(); ctx.globalAlpha = 0.9; ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(X, Y, r * 1.6, 0, 7); ctx.fill(); ctx.restore();
+    }
+    /* капельки */
+    ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    for (let i = 0; i < 3; i++) {
+      const u = 0.15 + rnd() * 0.7, c = polyPointAt(pts, u), nm = polyNormalAt(pts, u);
+      ctx.globalAlpha = 0.5 + 0.4 * Math.sin(t * 2 + i);
+      ctx.beginPath(); ctx.arc(c[0] + nm[0] * wIn * 0.25, c[1] + nm[1] * wIn * 0.25, wIn * 0.05, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /* ------------------------- модуль целиком ------------------------- */
+  /* рисует модуль в точке (x,y) — центр; opts: {state, scale, t, dark, seed, alpha, wOut} */
+  function drawModule(ctx, id, x, y, opts) {
+    opts = opts || {};
+    const geo = modGeometry(id, opts);
+    const st = opts.state || 'empty';
+    ctx.save();
+    ctx.translate(x, y);
+    if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
+    const pathRuns = geo.paths.map((p,pi) => (st === 'empty' || st === 'steam' || st === 'surprise') ? [] :
+      cutBelow([p], geo.surfY).map((r, i) => ({ pts: r, surf: surfaceIdx(r), ph: pi * 1.7 + i * 0.9 })));
+    // Draw all glass branches first, then the liquid pass across tees/crosses.
+    geo.paths.forEach((p, pi) => drawTube(ctx, {
+      pts: p, wOut: geo.wOut, wIn: geo.wIn, state: st, runs: pathRuns[pi],
+      t: opts.t || 0, seed: (opts.seed || id) + st + pi, dark: opts.dark,
+      rims: opts.rims !== false, collars: [], skipLiquid: true
+    }));
+    geo.paths.forEach((p, pi) => drawTube(ctx, {
+      pts: p, wOut: geo.wOut, wIn: geo.wIn, state: st, runs: pathRuns[pi],
+      t: opts.t || 0, seed: (opts.seed || id) + st + pi, dark: opts.dark, liquidOnly: true
+    }));
+    /* муфты */
+    for (const c of (geo.extras.collars || [])) collar(ctx, c.p, angleAt(geo.paths[0], c.t || 0.5), c.w, THEMES[opts.dark ? 'dark' : 'light'], 1);
+    /* заглушка-домик */
+    if (geo.extras.cap) {
+      const th = THEMES[opts.dark ? 'dark' : 'light'];
+      const p = geo.extras.cap.p, w = geo.wOut;
+      const g = ctx.createLinearGradient(p[0] - w, p[1] - w / 2, p[0] + w, p[1] + w / 2);
+      g.addColorStop(0, th.casingTop); g.addColorStop(1, th.casingBot);
+      ctx.save();
+      ctx.beginPath(); ctx.arc(p[0], p[1], w * 0.52, -Math.PI / 2, Math.PI / 2); ctx.closePath();
+      ctx.fillStyle = g; ctx.fill();
+      ctx.strokeStyle = th.outline; ctx.lineWidth = Math.max(2, w * 0.10); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(p[0] + w * 0.16, p[1], w * 0.16, w * 0.34, 0, 0, 7);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function surfaceIdx(runPts) {
+    let idx = 0, best = 1e9;
+    for (let i = 0; i < runPts.length; i++) if (runPts[i][1] < best) { best = runPts[i][1]; idx = i; }
+    return runPts.length > 1 ? idx / (runPts.length - 1) : 0;
+  }
+
+  /* прокси для демо: набор модулей уровня */
+  const LEVEL_MODULES = {
+    S: ['tank'], A1: ['straightS'], J: ['coupling'], B1: ['straightM', 'elbow'],
+    UL: ['straightS'], UM: ['straightM'], UR: ['straightS'],
+    C1: ['straightM', 'elbow'], F: ['end'], AC: ['tank'], AL: ['straightM', 'elbow', 'straightM']
+  };
+
+  return {
+    THEMES, MODULES, MOD_BY_ID, STATES, STATE_RU, STATE_EN, STATE_COL,
+    modGeometry, drawTube, drawModule, cutBelow, cutBelowLine, roundPoly, strokePoly, offsetNormal,
+    polyPointAt, polyNormalAt, hashSeed, mulberry32, LEVEL_MODULES
+  };
+});
+
+</script>
+<script>
+'use strict';
+/* =====================================================================
+   АКВА-БУМ! СПАСТИ УМУ — техно-демо «Первый поток»
+   Секции: i18n → звук → PlatformAPI → математика → уровень → симуляция
+           → ввод → рендер (лаборатория+трубы+Ума) → экраны/цикл
+   ===================================================================== */
+
+/* ================= i18n: RU/EN, global T()/lang (как в Мат-Бум 1) ===== */
+const I18N={
+ru:{
+ play:'ИГРАТЬ', constructor:'КОНСТРУКТОР', help:'КАК ИГРАТЬ', mods:'МОДУЛИ ТРУБ', back:'Назад', ver:'техно-демо v0.5 · «Первый поток» · 2026',
+ theme_light:'Светлая тема', theme_dark:'Тёмная тема', sound_on:'Выключить звук', sound_off:'Включить звук',
+ lang_btn:'EN', drag:'Перетаскивай стенд во все стороны · щипок / колесо / − + — зум · тап по шиберу',
+ drag_touch:'Перетаскивай стенд во все стороны · щипок / − + — зум · тап по шиберу · ▤ — добавить',
+ drag_pc:'Перетаскивай стенд мышью — вращение во все стороны · колесо / + − — зум · клик по шиберу · ▤ — добавить · Space — заморозка · R — рестарт',
+ restart:'Рестарт уровня', freeze:'ЗАМОРОЗКА', freeze_off:'ЗАМОРОЗКА',
+ gate_btn:'Установить квадратный шибер', gate_cancel:'Отменить установку шибера',
+ gate_place_hint:'Нажми на свободный участок прозрачной трубы, чтобы установить квадратный шибер.',
+ gate_place_cancel:'Режим установки шибера выключен.', gate_placed:'Шибер {label} установлен в трубу.',
+ gate_no_pipe:'Нажми непосредственно на свободный участок трубы.', gate_occupied:'Здесь уже есть узел. Выбери другой участок трубы.',
+ gate_limit:'Достигнут лимит дополнительных шиберов.',
+ hint_open:'Открой шибер A — пусти воду', hint_flow:'Вода течёт вниз. Кислотный шибер C не открывай!',
+ hint_wait:'Вода собраться внизу…', hint_freeze:'Жми ЗАМОРОЗКУ (модуль B): лёд перекроет низ',
+ hint_rise:'Вода поднимется и перельётся через лёд — Ума поплывёт наверх',
+ hint_almost:'Ума почти у выхода! Держи уровень', hint_acidwarn:'КИСЛОТА В ВОДЕ! Ума в опасности!',
+ win:'УМА СПАСЕНА!', win_time:'Время: ', reward:'Получен чип памяти (1/10 Звёздного ключа)',
+ again:'Ещё раз', next:'Дальше →', menu:'В меню', next_soon:'Уровень 2 «Сообщающиеся сосуды» — в разработке',
+ lose:'УМА В КИСЛОТЕ!', lose_sub:'Кислота смешалась с водой. Не открывай шибер C!', retry:'Заново',
+ pause:'ПАУЗА', resume:'Продолжить', p_help:'Как играть', p_exit:'В меню',
+ keys:'Клавиши: ←→↑↓/WASD вращение · Q/E крен · +/− зум · R рестарт · F заморозка · Esc пауза',
+ help_title:'КАК ИГРАТЬ',
+ mods_title:'МОДУЛИ ТРУБ — style_01 «Pixar Glass»',
+ mods_sub:'Набор, из которого собраны трубы демо: прямые S/M/L, угол 90°, тройник, крестовина, муфта, торец, заглушка, U-ловушка — в шести состояниях. В уровне «Первый поток» используются прямые, угол, муфта и торец.',
+  help_html:`<h3>МОДУЛИ И КОНСТРУКТОР (v0.5)</h3><p>Стеклянные трубы и соединители прозрачны; элементы можно добавлять к любому свободному участку. Открой <b>КОНСТРУКТОР</b>, выбери прямую, угол, тройник или U-модуль и коснись существующей трубы. Инструменты «Вода», «Кислота» и «Пусто» заполняют выбранный элемент; там же устанавливаются 3D-шиберы, охладители и нагреватели.</p><h3>ЦЕЛЬ И УПРАВЛЕНИЕ</h3><p>Проведи Уму в капсуле-шарике из стартовой батисферы в камеру спасения. Потяни стенд мышью или пальцем, чтобы свободно повернуть всю конструкцию по трём осям; лаборатория остаётся вертикальной. Колесо, щипок и кнопки − / + управляют умеренным зумом.</p><h3>3D-ШИБЕР И ТЕПЛОВЫЕ МОДУЛИ</h3><ul><li>Квадратный шибер — трёхмерная деталь трубопровода с прозрачным корпусом, видимой заслонкой и приводом. Он вращается вместе с трубами и действительно перекрывает поток.</li><li>В конструкторе выбери шибер и коснись трубы для установки. Во время игры коснись корпуса, чтобы открыть или закрыть его.</li><li>Синяя боковая кнопка охладителя и красная кнопка нагревателя включают постепенное изменение температуры прилегающих участков. Нажми снова, чтобы выключить.</li><li>Стрелки/WASD — вращение; Q/E — крен; +/− — зум; F/Space — прежняя временная заморозка модуля B; R — рестарт; 1/2 — шиберы A/C; Esc — пауза.</li></ul><h3>ФАЗЫ И КИСЛОТА</h3><p><span class="chip w">ВОДА</span>замерзает при 0°C и ниже; лёд тает выше 0°C; при 100°C вода кипит, а пар конденсируется ниже 100°C. Пар поднимается по открытой трубе. <span class="chip a">КИСЛОТА</span>остаётся жидкой при любой температуре: не замерзает и не превращается в пар. Холодная кислота темнее и течёт медленнее, горячая светлее и быстрее.</p><p>Кислота заражает воду только в своей открытой связанной системе: закрытый шибер и лёд останавливают смешивание. Кислота не смешивается со льдом или паром; растаявший лёд и сконденсировавшийся пар рядом с кислотой становятся кислотой. Попав в кислоту, Ума краснеет; поражение наступает через 1 секунду контакта.</p><h3>«ПЕРВЫЙ ПОТОК»</h3><p>Открой шибер A, заморозь воду в модуле B, чтобы создать ледяной мост, и не открывай кислотный шибер C.</p>`,
+ ctor_title:'КОНСТРУКТОР · v0.5', ctor_pipe:'Труба', ctor_water:'Вода', ctor_acid:'Кислота', ctor_empty:'Пусто', ctor_gate:'3D-шибер', ctor_cooler:'Охладитель', ctor_heater:'Нагреватель',
+ ctor_straight:'Прямая', ctor_elbow:'Угол 90°', ctor_tee:'Тройник', ctor_loop:'U-модуль', ctor_test:'Проверить уровень', ctor_clear:'Очистить добавленное',
+ ctor_hint:'Выбери инструмент и коснись трубы, чтобы добавить элемент. Охладитель и нагреватель активируются боковой кнопкой уже во время игры.',
+ ctor_tap_pipe:'Коснись непосредственно прозрачной трубы.', ctor_occupied:'Здесь уже есть устройство или соединение — выбери другой участок.',
+ ctor_activate:'Синяя/красная боковая кнопка включает постепенное изменение температуры.', ctor_gate_added:'3D-шибер установлен. Выбери участок трубы, чтобы поставить ещё один.',
+ ctor_part_added:'Добавлен модуль: {part}.', ctor_filled:'Элемент {type}.',
+ stat_fps:'кадр/с', stat_draw:'отрисовок', stat_liq:'жидкости', stat_rot:'ориентация'
+},
+en:{
+ play:'PLAY', constructor:'CONSTRUCTOR', help:'HOW TO PLAY', mods:'PIPE MODULES', back:'Back', ver:'tech demo v0.5 · “First Flow” · 2026',
+ theme_light:'Light theme', theme_dark:'Dark theme', sound_on:'Mute', sound_off:'Unmute',
+ lang_btn:'RU', drag:'Drag the rig in any direction · pinch / wheel / − + zoom · tap a gate',
+ drag_touch:'Drag the rig in any direction · pinch / − + zoom · tap a gate · ▤ add one',
+ drag_pc:'Drag the rig in any direction · wheel / + − zoom · click a gate · ▤ add one · Space freeze · R restart',
+ restart:'Restart level', freeze:'FREEZE', freeze_off:'FREEZE',
+ gate_btn:'Place a square slide gate', gate_cancel:'Cancel gate placement',
+ gate_place_hint:'Tap a free section of transparent pipe to place the square slide gate.',
+ gate_place_cancel:'Gate placement mode is off.', gate_placed:'Gate {label} installed inline.',
+ gate_no_pipe:'Tap directly on a free section of pipe.', gate_occupied:'That spot is occupied. Choose another section of pipe.',
+ gate_limit:'Maximum number of extra gates reached.',
+ hint_open:'Open gate A — let the water run', hint_flow:'Water flows down. Do NOT open acid gate C!',
+ hint_wait:'Water is gathering at the bottom…', hint_freeze:'Press FREEZE (module B): ice will plug the bottom',
+ hint_rise:'Water will rise over the ice — Uma floats up', hint_almost:'Uma is almost at the exit! Hold it',
+ hint_acidwarn:'ACID IN THE WATER! Uma is in danger!',
+ win:'UMA IS SAFE!', win_time:'Time: ', reward:'Memory chip acquired (1/10 of the Star Key)',
+ again:'Play again', next:'Next →', menu:'To menu', next_soon:'Level 2 “Communicating Vessels” — in development',
+ lose:'UMA GOT ACID!', lose_sub:'Acid mixed with the water. Never open gate C!', retry:'Retry',
+ pause:'PAUSED', resume:'Resume', p_help:'How to play', p_exit:'To menu',
+ keys:'Keys: arrows/WASD rotate · Q/E roll · +/− zoom · R restart · F freeze · Esc pause',
+ help_title:'HOW TO PLAY',
+ mods_title:'PIPE MODULES — style_01 “Pixar Glass”',
+ mods_sub:'The kit the demo pipes are built from: straights S/M/L, 90° elbows, tees, crosses, couplings, open ends, caps and U-traps — in six states. The “First Flow” level uses straights, elbow, coupling and open end.',
+  help_html:`<h3>MODULES AND CONSTRUCTOR (v0.5)</h3><p>Transparent glass pipes and connectors keep the liquid visible. Open the <b>CONSTRUCTOR</b>, choose a straight, elbow, tee, or U-shaped module, then tap an existing pipe to attach it. Water, Acid, and Empty tools fill or clear any selected pipe element; gates, coolers, and heaters can be installed there too.</p><h3>GOAL AND CONTROLS</h3><p>Guide Uma in her bubble capsule from the launch bathysphere to the rescue chamber. Drag the rig with a mouse or finger to freely rotate the whole construction on all three axes; the laboratory stays upright. Wheel, pinch, and − / + buttons provide modest zoom.</p><h3>3D GATE AND THERMAL MODULES</h3><ul><li>The square gate is a true 3-D inline pipe component with a transparent housing, visible shutter, and actuator. It rotates with the pipe rig and really blocks flow.</li><li>Choose Gate in the constructor and tap a pipe to install it. During play, tap its body to open or close it.</li><li>The cooler’s blue side button and heater’s red button gradually change the temperature of adjacent pipe sections. Tap again to switch the device off.</li><li>Arrows/WASD rotate; Q/E roll; +/− zoom; F/Space triggers the legacy temporary freeze in module B; R restarts; 1/2 toggle gates A/C; Esc pauses.</li></ul><h3>PHASES AND ACID</h3><p><span class="chip w">WATER</span>freezes at 0°C or below, ice melts above 0°C, water boils at 100°C, and steam condenses below 100°C. Steam rises through an open pipe. <span class="chip a">ACID</span>stays liquid at any temperature: it never freezes or turns to steam. Cold acid darkens and flows more slowly; hot acid brightens and flows faster.</p><p>Acid poisons water only in its own open, connected system; closed gates and ice stop mixing. Acid does not mix with ice or steam. Meltwater and condensate that form near acid become acid. Uma turns red on contact; one second in acid causes defeat.</p><h3>“FIRST FLOW”</h3><p>Open gate A, freeze water in module B to make an ice bridge, and keep acid gate C closed.</p>`,
+ ctor_title:'CONSTRUCTOR · v0.5', ctor_pipe:'Pipe', ctor_water:'Water', ctor_acid:'Acid', ctor_empty:'Empty', ctor_gate:'3D gate', ctor_cooler:'Cooler', ctor_heater:'Heater',
+ ctor_straight:'Straight', ctor_elbow:'90° elbow', ctor_tee:'Tee', ctor_loop:'U-module', ctor_test:'Test level', ctor_clear:'Clear additions',
+ ctor_hint:'Choose a tool and tap a pipe to add an element. The cooler and heater are activated with their side button during play.',
+ ctor_tap_pipe:'Tap directly on a transparent pipe.', ctor_occupied:'That spot already has a device or joint. Choose another section.',
+ ctor_activate:'The blue/red side button gradually changes temperature during play.', ctor_gate_added:'3D gate installed. Tap another pipe section to add another.',
+ ctor_part_added:'Added module: {part}.', ctor_filled:'Element {type}.',
+ stat_fps:'fps', stat_draw:'draws', stat_liq:'liquid', stat_rot:'orientation'
+}};
+let LANG='ru';
+function T(k,vars){let s=(I18N[LANG]&&I18N[LANG][k])??(I18N.ru[k]??k);
+ if(vars)for(const q in vars)s=s.split('{'+q+'}').join(vars[q]);
+ return s;}
+function setLang(l){LANG=(l==='en')?'en':'ru';try{localStorage.setItem('aquaboom_lang',LANG);}catch(e){}}
+function lang(){return LANG;}
+try{const v=localStorage.getItem('aquaboom_lang');if(v==='en'||v==='ru')LANG=v;}catch(e){}
+
+/* ================= звук: WebAudio-синтез (подход Мат-Бум 1) ========== */
+let AC=null,master=null,flowGain=null,flowSrc=null,sndOn=true,humG=null;
+try{sndOn=localStorage.getItem('aquaboom_sound')!=='off';}catch(e){}
+function audio(){ if(!AC){ try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
+  master=AC.createGain();master.gain.value=sndOn?.5:0;master.connect(AC.destination);
+  humG=AC.createGain();humG.gain.value=.012;humG.connect(master);          /* эмбиент лаборатории */
+  [50,50.7,100.3].forEach(f=>{const o=AC.createOscillator();o.frequency.value=f;o.type='sine';o.connect(humG);o.start();});
+  /* Continuous flow noise is intentionally disabled in v0.5; only discrete events make sound. */
+  flowGain=AC.createGain();flowGain.gain.value=0;flowGain.connect(master);
+ } if(AC.state==='suspended')AC.resume(); }
+function tone(f,dur,type,vol,slide,delay){ if(!sndOn||!AC)return; const t=AC.currentTime+(delay||0);
+  const o=AC.createOscillator(),g=AC.createGain();o.type=type||'sine';o.frequency.setValueAtTime(f,t);
+  if(slide)o.frequency.exponentialRampToValueAtTime(slide,t+dur);
+  g.gain.setValueAtTime(vol||.2,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+.02); }
+
+const S={
+ click:()=>tone(950,.05,'square',.08),
+ sel:()=>{tone(1250,.07,'sine',.15);tone(1900,.05,'sine',.08,0,.02)},
+ valve:()=>{tone(320,.06,'square',.13);tone(180,.09,'sine',.12,90,.03)},
+ freeze:()=>{tone(520,.14,'triangle',.10,960);tone(1040,.18,'sine',.08,1500,.04)},
+ melt:()=>{tone(700,.10,'sine',.09,420);tone(520,.12,'sine',.07,310,.08)},
+ bubble:()=>tone(520,.06,'sine',.06,860),
+ acid:()=>{tone(260,.22,'triangle',.11,190);tone(190,.24,'sine',.09,150,.10)},
+ cooler:()=>{tone(780,.12,'sine',.10,520);tone(520,.16,'triangle',.08,390,.06)},
+ heater:()=>{tone(420,.12,'sine',.10,620);tone(620,.16,'triangle',.08,880,.06)},
+ hurt:()=>{tone(300,.25,'sawtooth',.15,120);tone(220,.3,'sawtooth',.12,90,.1)},
+ win:()=>{[523,659,784,1047].forEach((f,i)=>tone(f,.3,'triangle',.16,0,i*.11));
+   [1568,2093].forEach((f,i)=>tone(f,.5,'sine',.1,0,.5+i*.12));},
+ lose:()=>{[392,330,262,196].forEach((f,i)=>tone(f,.35,'triangle',.14,0,i*.16));},
+ splash:()=>tone(600,.12,'sine',.07,250)
+};
+document.addEventListener('pointerdown',audio);
+document.addEventListener('keydown',audio);
+function setSound(on){sndOn=!!on;try{localStorage.setItem('aquaboom_sound',on?'on':'off');}catch(e){}
+ if(master)master.gain.value=on?.5:0;return sndOn;}
+function isSoundOn(){return sndOn;}
+/* ================= PlatformAPI: мост к Яндекс Играм / VK Mini Apps ====
+   Сейчас — автономный режим (localStorage + navigator.language).
+   При наличии window.ysdk (Яндекс) или VK Bridge методы подхватываются;
+   скрипты SDK добавляются ТОЛЬКО в платформенных сборках (требование:
+   демо-файл работает офлайн без докачек). Точки разметки геймплея:
+   gameplayStart — вход в уровень, gameplayStop — победа/поражение/пауза. */
+const Plat=(()=>{
+ const hasY=()=>typeof window.ysdk!=='undefined'&&window.ysdk;
+ const hasVK=()=>typeof window.vkBridge!=='undefined'||(window.parent!==window&&typeof window.VKBridge!=='undefined');
+ return {
+  init(){ /* Y: ysdk.ready/loading; VK: VKWebAppInit */
+    if(hasY()){try{window.ysdk.features.LoadingAPI&&window.ysdk.features.LoadingAPI.ready();}catch(e){}}
+  },
+  lang(){ if(hasY()){try{return (window.ysdk.environment&&window.ysdk.environment.i18n&&window.ysdk.environment.i18n.lang)||'';}catch(e){}}
+    return (navigator.language||'ru').slice(0,2); },
+  gameplayStart(){ if(hasY()){try{window.ysdk.features.GameplayAPI&&window.ysdk.features.GameplayAPI.start();}catch(e){}} },
+  gameplayStop(){ if(hasY()){try{window.ysdk.features.GameplayAPI&&window.ysdk.features.GameplayAPI.stop();}catch(e){}} },
+  save(k,v){ try{localStorage.setItem('aquaboom_'+k,JSON.stringify(v));}catch(e){} },
+  load(k,d){ try{const r=localStorage.getItem('aquaboom_'+k);return r==null?d:JSON.parse(r);}catch(e){return d;} }
+ };})();
+
+/* ================= математика: vec3 + mat4 (подход Мат-Бум 1) ======== */
+function mI(){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1])}
+function mMul(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++){let s=0;
+ for(let k=0;k<4;k++)s+=a[k*4+r]*b[c*4+k];o[c*4+r]=s;}return o;}
+function mPersp(fov,asp,n,f){const t=1/Math.tan(fov/2);return new Float32Array([t/asp,0,0,0,0,t,0,0,0,0,(f+n)/(n-f),-1,0,0,2*f*n/(n-f),0])}
+function mRotX(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([1,0,0,0,0,c,s,0,0,-s,c,0,0,0,0,1])}
+function mRotY(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-s,0,0,1,0,0,s,0,c,0,0,0,0,1])}
+function mRotZ(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,s,0,0,-s,c,0,0,0,0,1,0,0,0,0,1])}
+function mTrans(x,y,z){const m=mI();m[12]=x;m[13]=y;m[14]=z;return m}
+function mScale(s){return new Float32Array([s,0,0,0,0,s,0,0,s,0,0,0,0,0,0,1])}
+function tP(m,v){const w=m[3]*v[0]+m[7]*v[1]+m[11]*v[2]+m[15];
+ return [(m[0]*v[0]+m[4]*v[1]+m[8]*v[2]+m[12])/w,(m[1]*v[0]+m[5]*v[1]+m[9]*v[2]+m[13])/w,(m[2]*v[0]+m[6]*v[1]+m[10]*v[2]+m[14])/w,w];}
+
+/* ================= уровень «Первый поток»: граф труб (ТЗ §2.2) =======
+   Узел = отрезок трубы: полилиния (локальные координаты, м), ёмкость (л).
+   Объёмы визуально уменьшены (ТЗ §4 разрешает): резервуар 300 мл и т.д.
+   Рёбра = соединения; valve — квадратный шибер; freeze — модуль заморозки.  */
+const LEVEL={
+ nodes:[
+  {id:'S',  cap:0.300, pts:[[-0.62,1.18,0],[-0.62,0.90,0]], tank:'water', init:{type:'water',vol:0.300}},
+  {id:'A1', cap:0.050, pts:[[-0.62,0.88,0],[-0.62,0.56,0]]},
+  {id:'J',  cap:0.015, pts:[[-0.62,0.56,0],[-0.62,0.54,0]]},
+  {id:'B1', cap:0.090, pts:[[-0.62,0.54,0],[-0.62,0.10,0],[-0.34,-0.10,0]]},
+  {id:'UL', cap:0.040, pts:[[-0.34,-0.10,0],[-0.12,-0.30,0]]},
+  {id:'UM', cap:0.040, pts:[[-0.12,-0.30,0],[0.12,-0.30,0]], freeze:'B'},
+  {id:'UR', cap:0.040, pts:[[0.12,-0.30,0],[0.34,-0.10,0]]},
+  {id:'C1', cap:0.100, pts:[[0.34,-0.10,0],[0.62,0.10,0],[0.62,0.52,0]]},
+  {id:'F',  cap:0.040, pts:[[0.62,0.52,0],[0.62,0.72,0]], finish:true},
+  {id:'AC', cap:0.100, pts:[[0.62,1.18,0],[0.62,0.90,0]], tank:'acid', init:{type:'acid',vol:0.100}},
+  {id:'AL', cap:0.090, pts:[[0.62,0.88,0],[0.62,0.56,0],[-0.56,0.56,0]]}
+ ],
+ edges:[
+  {a:'S', b:'A1', valve:'A', vpos:[-0.62,0.89,0]},
+  {a:'A1',b:'J'},
+  {a:'J', b:'B1'},
+  {a:'B1',b:'UL'},
+  {a:'UL',b:'UM'},
+  {a:'UM',b:'UR'},
+  {a:'UR',b:'C1'},
+  {a:'C1',b:'F'},
+  {a:'AC',b:'AL'},
+  {a:'AL',b:'J'}
+ ]
+};
+/* Кран A остаётся на входном стыке. Кран C теперь настоящий встроенный узел
+   в горизонтальном участке AL; пользовательские Ш1, Ш2… добавляются к этому списку. */
+const INLINE_GATES=[{valve:'C',nodeId:'AL',s:0.89,vpos:[0.05,0.56,0],tangent:[-1,0,0]}];
+let placedGates=[],nextPlacedGate=1;
+let placedDevices=[],nextDevice=1,customParts=[],nextPart=1;
+let fillOverrides=Object.create(null);
+const LIQUID=Object.freeze({EMPTY:'empty',WATER:'water',ICE:'ice',STEAM:'steam',ACID:'acid'});
+const MAX_PLACED_GATES=12,MAX_DEVICES=12,MAX_CUSTOM_PARTS=40,GATE_END_MARGIN=0.032,GATE_MIN_SPACING=0.245;
+const PIPE_R=0.073, PIPE_RI=0.055;     /* наружный/внутренний радиусы: +46% от исходного диаметра */
+const TABLE_Y=-0.18;                    /* стол ниже; нижняя труба касается поверхности */
+const STRUCT_Y=TABLE_Y+0.30+PIPE_R;
+const RIG_PIVOT=[0,0.50,0];             /* вращаем весь стенд вокруг его центра */
+const FREEZE_TIME=10;                  /* ТЗ §6.2: лёд тает через 10 с */
+const SIM_HZ=30;                       /* ТЗ §10.1: обновление 30 Гц */
+
+/* ---------- состояние симуляции ---------- */
+let ND=[],ED=[],ball=null,simTime=0,gameState='idle',acidAlarm=false,hurtT=0,winT=0;
+let flowNow=0,freezeLeft=0,freezeOn=false;
+function pathMetrics(pts){
+ const len=[],cum=[0];let L=0;
+ for(let i=1;i<pts.length;i++){
+  const d=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1],pts[i][2]-pts[i-1][2]);
+  len.push(d);L+=d;cum.push(L);
+ }
+ return {len,cum,L};
+}
+function pathPointAt(pts,cum,s){
+ if(!pts.length)return[0,0,0];
+ if(s<=0)return pts[0].slice();
+ const total=cum[cum.length-1]||0;if(s>=total)return pts[pts.length-1].slice();
+ for(let i=1;i<pts.length;i++)if(s<=cum[i]+1e-9){
+  const span=cum[i]-cum[i-1],f=span>1e-9?Math.max(0,Math.min(1,(s-cum[i-1])/span)):0;
+  return pts[i-1].map((v,k)=>v+(pts[i][k]-v)*f);
+ }
+ return pts[pts.length-1].slice();
+}
+function pathSlice(pts,cum,s0,s1){
+ const out=[pathPointAt(pts,cum,s0)];
+ for(let i=1;i<pts.length-1;i++)if(cum[i]>s0+1e-8&&cum[i]<s1-1e-8)out.push(pts[i].slice());
+ out.push(pathPointAt(pts,cum,s1));return out;
+}
+function pathTangentAt(pts,cum,s){
+ for(let i=1;i<pts.length;i++)if(s<=cum[i]+1e-8){
+  const d=pts[i].map((v,k)=>v-pts[i-1][k]),l=Math.hypot(...d)||1;return d.map(v=>v/l);
+ }
+ const a=pts[pts.length-2]||pts[0],b=pts[pts.length-1],d=b.map((v,k)=>v-a[k]),l=Math.hypot(...d)||1;return d.map(v=>v/l);
+}
+function closestEndpointPair(a,b){
+ let best=[0,0],bd=Infinity;
+ for(let ea=0;ea<2;ea++)for(let eb=0;eb<2;eb++){
+  const pa=ea?a.pts[a.pts.length-1]:a.pts[0],pb=eb?b.pts[b.pts.length-1]:b.pts[0];
+  const d=(pa[0]-pb[0])**2+(pa[1]-pb[1])**2+(pa[2]-pb[2])**2;
+  if(d<bd){bd=d;best=[ea,eb];}
+ }
+ return best;
+}
+function runtimeBaseNodes(){return LEVEL.nodes.concat(customParts.map(p=>p.node));}
+function defaultTemp(type){return type==='ice'?0:type==='steam'?100:20;}
+function baseFill(base){
+ const o=fillOverrides[base.id];
+ if(o)return {type:o.type||'empty',fraction:o.fraction==null?1:o.fraction,temperature:o.temperature==null?defaultTemp(o.type):o.temperature};
+ const init=base.init||{};return {type:init.type||'empty',fraction:base.cap?Math.max(0,Math.min(1,(init.vol||0)/base.cap)):0,temperature:init.temperature==null?defaultTemp(init.type||'empty'):init.temperature};
+}
+function allInlineCuts(){
+ return INLINE_GATES.map(g=>({...g,cutKind:'gate'}))
+  .concat(placedGates.map(g=>({...g,cutKind:'gate'})))
+  .concat(placedDevices.map(d=>({...d,cutKind:'device'})))
+  .concat(customParts.map(p=>({...p.attach,cutKind:'junction',customNodeId:p.node.id,customPartId:p.id})));
+}
+function buildLevel(preserveState=false){
+ const oldRecords=[],oldElementStates=new Map();
+ const oldRuntime={simTime,gameState,acidAlarm,hurtT,winT,freezeLeft,freezeOn};
+ let oldBallData=null;
+ if(preserveState){
+  computeHeights();
+  for(const n of ND){
+   const lev=(n.type==='empty'||n.vol<=1e-7)?-1e9:nodeLevel(n,n.vol,n.type);
+   oldRecords.push({n,level:lev,type:n.type,iceT:n.iceT||0,temperature:n.temperature==null?defaultTemp(n.type):n.temperature});
+  }
+  for(const e of ED){
+   if(e.valve)oldElementStates.set('v:'+e.valve,{open:e.open,valveAng:e.valveAng||0});
+   if(e.deviceId)oldElementStates.set('d:'+e.deviceId,{active:!!e.active});
+  }
+  if(ball&&ND[ball.node]){
+   const n=ND[ball.node];oldBallData={ball:{...ball,px:ball.px.slice()},sourceId:n.sourceId||n.id,sourceS:(n.s0||0)+ball.u};
+  }
+ }
+ const baseNodes=runtimeBaseNodes(),baseById=new Map(baseNodes.map(n=>[n.id,n]));
+ const bySource=new Map();
+ for(const c of allInlineCuts()){
+  const id=c.nodeId||c.sourceId;if(!id)continue;
+  if(!bySource.has(id))bySource.set(id,[]);bySource.get(id).push(c);
+ }
+ const newND=[],piecesBySource=new Map(),inlineEdges=[];
+ for(const base of baseNodes){
+  const metrics=pathMetrics(base.pts);
+  let cuts=(bySource.get(base.id)||[]).filter(g=>Number.isFinite(g.s)&&g.s>GATE_END_MARGIN&&g.s<metrics.L-GATE_END_MARGIN).sort((a,b)=>a.s-b.s);
+  const unique=[];
+  for(const c of cuts)if(!unique.length||Math.abs(c.s-unique[unique.length-1].s)>0.04)unique.push(c);
+  const bounds=[0,...unique.map(c=>c.s),metrics.L],pieces=[];
+  const initial=baseFill(base);
+  for(let i=0;i<bounds.length-1;i++){
+   const s0=bounds[i],s1=bounds[i+1],pts=pathSlice(base.pts,metrics.cum,s0,s1),part=pathMetrics(pts);
+   const split=unique.length>0,id=split?`${base.id}~${i+1}`:base.id;
+   const n={id,sourceId:base.id,parentId:base.id,s0,s1,pts,len:part.len,L:part.L,
+    cap:base.cap*((s1-s0)/(metrics.L||1)),tank:base.tank||null,
+    finish:!!base.finish&&i===bounds.length-2,freeze:base.freeze||null,
+    vol:initial.type==='empty'?0:(initial.fraction*base.cap*((s1-s0)/(metrics.L||1))),type:initial.type,
+    temperature:initial.temperature,iceT:0,
+    h:pts.map(p=>worldH(p)),cum:part.cum,surf:0};
+   if(preserveState){
+    const old=oldRecords.find(r=>r.n.sourceId===base.id&&s0>=r.n.s0-1e-7&&s1<=r.n.s1+1e-7);
+    if(old){
+     n.type=old.type;n.iceT=old.iceT||0;n.temperature=old.temperature;
+     n.vol=old.type==='empty'?0:volumeAtLevel(n,old.level,old.type);
+     if(n.vol<=1e-7){n.vol=0;n.type='empty';}
+     else if(n.vol>=n.cap-1e-7)n.vol=n.cap;
+    }else{n.type='empty';n.vol=0;n.temperature=defaultTemp('empty');}
+   }
+   pieces.push(n);newND.push(n);
+  }
+  piecesBySource.set(base.id,pieces);
+  for(let i=0;i<unique.length;i++){
+   const c=unique[i],pos=Math.max(0,Math.min(metrics.L,c.s));
+   const common={a:pieces[i].id,b:pieces[i+1].id,
+    vpos:(c.vpos||pathPointAt(base.pts,metrics.cum,pos)).slice(),
+    tangent:(c.tangent||pathTangentAt(base.pts,metrics.cum,pos)).slice(),inlineCut:true};
+   if(c.cutKind==='device'){
+    inlineEdges.push({...common,deviceId:c.deviceId,deviceType:c.deviceType,active:!!c.active,open:true});
+   }else if(c.cutKind==='junction'){
+    inlineEdges.push({...common,open:true,junction:true});
+    inlineEdges.push({a:pieces[i].id,b:c.customNodeId,open:true,customConnection:true,customPartId:c.customPartId});
+   }else{
+    inlineEdges.push({...common,valve:c.valve||null,gateId:c.gateId||null,open:false,valveAng:0,gateType:'slide'});
+   }
+  }
+ }
+ const newED=[];
+ for(const e of LEVEL.edges){
+  const aBase=baseById.get(e.a),bBase=baseById.get(e.b);if(!aBase||!bBase)continue;
+  const [aEnd,bEnd]=closestEndpointPair(aBase,bBase);
+  const ap=piecesBySource.get(e.a),bp=piecesBySource.get(e.b);
+  const mapped={...e,a:aEnd?ap[ap.length-1].id:ap[0].id,b:bEnd?bp[bp.length-1].id:bp[0].id,
+   open:e.valve?false:true,valveAng:0,gateType:e.valve?'slide':null};
+  if(preserveState&&mapped.valve&&oldElementStates.has('v:'+mapped.valve)){
+   const st=oldElementStates.get('v:'+mapped.valve);mapped.open=st.open;mapped.valveAng=st.valveAng;
+  }
+  newED.push(mapped);
+ }
+ for(const e of inlineEdges){
+  if(preserveState&&e.valve&&oldElementStates.has('v:'+e.valve)){
+   const st=oldElementStates.get('v:'+e.valve);e.open=st.open;e.valveAng=st.valveAng;
+  }
+  if(preserveState&&e.deviceId&&oldElementStates.has('d:'+e.deviceId))e.active=oldElementStates.get('d:'+e.deviceId).active;
+  newED.push(e);
+ }
+ ND=newND;ED=newED;
+ if(preserveState&&oldBallData){
+  let bi=ND.findIndex(n=>n.sourceId===oldBallData.sourceId&&oldBallData.sourceS>=n.s0-1e-7&&oldBallData.sourceS<=n.s1+1e-7);
+  if(bi<0){let bd=Infinity;for(let i=0;i<ND.length;i++)if(ND[i].sourceId===oldBallData.sourceId){
+   const d=oldBallData.sourceS<ND[i].s0?ND[i].s0-oldBallData.sourceS:oldBallData.sourceS>ND[i].s1?oldBallData.sourceS-ND[i].s1:0;
+   if(d<bd){bd=d;bi=i;}}
+  }
+  if(bi>=0){const n=ND[bi];ball={...oldBallData.ball,node:bi,u:Math.max(0,Math.min(n.L,oldBallData.sourceS-n.s0))};}
+ }
+ if(preserveState){
+  simTime=oldRuntime.simTime;gameState=oldRuntime.gameState;acidAlarm=oldRuntime.acidAlarm;
+  hurtT=oldRuntime.hurtT;winT=oldRuntime.winT;freezeLeft=oldRuntime.freezeLeft;freezeOn=oldRuntime.freezeOn;
+  flowNow=0;flowOut={};mv_list.length=0;ovFrom={};computeHeights();
+  return;
+ }
+ ball={node:0,u:0.35,px:worldPoint([-0.62,1.35,0]),state:'float',hurt:false,dead:false,face:0,blink:0,bub:0};
+ simTime=0;acidAlarm=false;hurtT=0;winT=0;flowNow=0;freezeLeft=0;freezeOn=false;
+ gameState='play';valvesInit();
+}
+function nodeById(id){return ND.findIndex(n=>n.id===id)}
+function valvesInit(){ED.forEach(e=>{if(e.valve){e.open=false;e.valveAng=0;}});}
+const idxS=()=>0, idxF=()=>ND.findIndex(n=>n.finish), idxU=()=>ND.findIndex(n=>n.sourceId==='UM');
+
+/* ---------- всестороннее вращение стенда: arcball-кватернион ---------- */
+function qMultiply(a,b){return [
+ a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],
+ a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],
+ a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],
+ a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];}
+function qNormalize(q){const l=Math.hypot(q[0],q[1],q[2],q[3])||1;return q.map(v=>v/l);}
+function qAxisAngle(axis,a){const l=Math.hypot(axis[0],axis[1],axis[2])||1,s=Math.sin(a/2)/l;
+ return [axis[0]*s,axis[1]*s,axis[2]*s,Math.cos(a/2)];}
+function qRotateVec(q,v){const p=[v[0],v[1],v[2],0],qi=[-q[0],-q[1],-q[2],q[3]];
+ return qMultiply(qMultiply(q,p),qi).slice(0,3);}
+function qBetween(a,b){const la=Math.hypot(...a)||1,lb=Math.hypot(...b)||1;
+ const u=a.map(x=>x/la),v=b.map(x=>x/lb),d=Math.max(-1,Math.min(1,u[0]*v[0]+u[1]*v[1]+u[2]*v[2]));
+ let ax=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],al=Math.hypot(...ax);
+ if(al<1e-8){if(d>0)return[0,0,0,1];ax=Math.abs(u[0])<.8?[0,-u[2],u[1]]:[-u[1],u[0],0];al=Math.hypot(...ax);}
+ const h=Math.acos(d)/2,k=Math.sin(h)/al;return[ax[0]*k,ax[1]*k,ax[2]*k,Math.cos(h)];}
+const ROT_DAMP=0.55,ROT_MAX_SPEED=4.2;
+const rot={q:[0,0,0,1],axis:[0,1,0],speed:0};
+const cam={az:-0.32,el:0.14,dist:4.2,targetY:0,base:4.2,min:2.8,max:6.2,zoom:1};
+let labYaw=0;
+function worldVector(v){return qRotateVec(rot.q,v);}
+function worldPoint(p){
+ const v=worldVector([p[0]-RIG_PIVOT[0],p[1]-RIG_PIVOT[1],p[2]-RIG_PIVOT[2]]);
+ return [v[0]+RIG_PIVOT[0],v[1]+RIG_PIVOT[1]+STRUCT_Y,v[2]+RIG_PIVOT[2]];
+}
+function worldH(p){return worldPoint(p)[1];}
+function qYaw(q){return Math.atan2(2*(q[3]*q[1]+q[0]*q[2]),1-2*(q[1]*q[1]+q[2]*q[2]));}
+
+/* ---------- геометрия узла: высоты точек, уровень заполнения ---------- */
+function computeHeights(){
+ for(const n of ND){for(let i=0;i<n.pts.length;i++)n.h[i]=worldH(n.pts[i]);}
+}
+/* высота уровня жидкости в узле при объёме vol (или -1e9 если пусто, +1e9 если полон) */
+function nodeLevel(n,vol,type=n.type){
+ const gas=type==='steam';
+ if(n.tank){
+  const a=Math.min(...n.h),b=Math.max(...n.h),span=b-a;
+  if(vol<=1e-6)return gas?b:a;
+  if(vol>=n.cap-1e-6)return gas?a:b;
+  const f=Math.min(1,vol/n.cap);
+  return gas?b-span*f:a+span*f;
+ }
+ if(vol<=1e-6)return gas?Math.max(...n.h):-1e9;
+ if(vol>=n.cap-1e-6)return gas?Math.min(...n.h):1e9;
+ let lo=Math.min(...n.h),hi=Math.max(...n.h);
+ for(let it=0;it<28;it++){
+  const L=(lo+hi)/2,liquid=volBelowNode(n,L),at=gas?n.cap-liquid:liquid;
+  if(gas?(at>vol):(at<vol))lo=L;else hi=L;
+ }
+ return (lo+hi)/2;
+}
+/* доля полилинии ниже уровня L: интервалы [t0,t1] в параметре дуги */
+function submergedRuns(n,L){
+ const runs=[];let cur=null;let s=0;
+ for(let i=1;i<n.pts.length;i++){const h0=n.h[i-1],h1=n.h[i],len=n.len[i-1];
+  const a=s,b=s+len;s=b;
+  if(h0<L&&h1<L){if(!cur)cur=[a,b];else cur[1]=b;continue;}
+  if(h0>=L&&h1>=L){if(cur){runs.push(cur);cur=null;}continue;}
+  const f=(L-h0)/(h1-h0);const x=a+len*f;
+  if(h0<L){if(!cur)cur=[a,x];else cur[1]=x;if(cur){runs.push(cur);cur=null;}}
+  else{if(cur){runs.push(cur);}cur=[x,b];}
+ }
+ if(cur)runs.push(cur);
+ return runs;
+}
+function supernatantRuns(n,L){
+ const runs=[];let cur=null;let s=0;
+ for(let i=1;i<n.pts.length;i++){
+  const h0=n.h[i-1],h1=n.h[i],len=n.len[i-1],a=s,b=s+len;s=b;
+  if(h0>L&&h1>L){if(!cur)cur=[a,b];else cur[1]=b;continue;}
+  if(h0<=L&&h1<=L){if(cur){runs.push(cur);cur=null;}continue;}
+  const f=Math.abs(h1-h0)<1e-9?.5:(L-h0)/(h1-h0),x=a+len*f;
+  if(h0>L){if(!cur)cur=[a,x];else cur[1]=x;runs.push(cur);cur=null;}
+  else{if(cur)runs.push(cur);cur=[x,b];}
+ }
+ if(cur)runs.push(cur);
+ return runs;
+}
+function runPoint(n,t){ /* точка на полилинии по длине дуги */
+ let s=0;
+ for(let i=1;i<n.pts.length;i++){const len=n.len[i-1];
+  if(t<=s+len||i===n.pts.length-1){const f=Math.max(0,Math.min(1,(t-s)/len));
+   const p0=n.pts[i-1],p1=n.pts[i];
+   return [p0[0]+(p1[0]-p0[0])*f,p0[1]+(p1[1]-p0[1])*f,p0[2]+(p1[2]-p0[2])*f];}
+  s+=len;}
+ return n.pts[n.pts.length-1];
+}
+
+/* ---------- сообщающиеся сосуды: компоненты и уровни ---------- */
+function valveReliefDirection(e){
+ /* В v0.5 все клапаны — квадратные двусторонние шиберы: закрытая заслонка
+    герметично перекрывает канал и не приоткрывается от обратного напора. */
+ return null;
+}
+function phasePairBlocked(a,b){
+ if(!a||!b||a.vol<=1e-7||b.vol<=1e-7)return false;
+ return (a.type==='steam'&&(b.type==='water'||b.type==='acid'))||
+        (b.type==='steam'&&(a.type==='water'||a.type==='acid'));
+}
+function edgeFlowAllowed(e,from,to){
+ if(e.valve&&!e.open)return false;
+ const a=ND[from],b=ND[to];
+ return !!a&&!!b&&a.type!=='ice'&&b.type!=='ice'&&!phasePairBlocked(a,b);
+}
+function edgePassable(e,forBall){
+ if(e.valve&&!e.open)return false;
+ const na=ND[nodeById(e.a)],nb=ND[nodeById(e.b)];
+ if(!na||!nb||na.type==='ice'||nb.type==='ice')return false;
+ if(phasePairBlocked(na,nb))return false;
+ return true;
+}
+function components(){
+ const comp=new Array(ND.length).fill(-1);let cn=0;
+ const adj=ND.map(()=>[]);
+ ED.forEach((e,ei)=>{if(edgePassable(e)){const a=nodeById(e.a),b=nodeById(e.b);if(a<0||b<0)return;adj[a].push([b,ei]);adj[b].push([a,ei]);}});
+ for(let i=0;i<ND.length;i++){if(comp[i]>=0)continue;
+  const st=[i];comp[i]=cn;
+  while(st.length){const v=st.pop();for(const[w]of adj[v])if(comp[w]<0){comp[w]=cn;st.push(w);}}
+  cn++;}
+ return {comp,adj,cn};
+}
+/* перелив через лёд: если уровень соседа выше гребня льда — виртуальное ребро */
+function overflowEdges(levels){
+ const res=[];
+ for(let mi=0;mi<ND.length;mi++){const m=ND[mi];if(m.type!=='ice')continue;
+  const crest=Math.max(...m.h)+PIPE_RI*0.9;
+  const nb=[];ED.forEach((e,ei)=>{if(nodeById(e.a)===mi)nb.push([nodeById(e.b),ei]);if(nodeById(e.b)===mi)nb.push([nodeById(e.a),ei]);});
+  for(const[u]of nb){const un=ND[u];
+   if(un.type!=='acid'&&un.type!=='steam'&&un.vol>1e-6&&levels[u]>crest)res.push({from:u,ice:mi,crest,nb});}}
+ return res;
+}
+
+/* объём узла ниже мирового уровня L */
+const KFLOW=0.5, AREA=Math.PI*PIPE_RI*PIPE_RI, MAXV=1.5, FLOW_CAP=MAXV*AREA*25;
+function volBelowNode(n,L){
+ if(n.tank){const a=Math.min(n.h[0],n.h[1]),b=Math.max(n.h[0],n.h[1]);
+  if(b-a<1e-9)return L>=b?n.cap:0;
+  return Math.max(0,Math.min(1,(L-a)/(b-a)))*n.cap;}
+ let v=0;
+ for(let i=1;i<n.pts.length;i++){const h0=n.h[i-1],h1=n.h[i],len=n.len[i-1];
+  const a=Math.min(h0,h1),b=Math.max(h0,h1);
+  if(L<=a)continue;
+  v+=(L>=b)?len:len*(L-a)/(b-a);}
+ return v/(n.L||1)*n.cap;
+}
+function volumeAtLevel(n,L,phase){
+ const gas=(phase||n.type)==='steam';
+ if(n.tank){
+  const a=Math.min(n.h[0],n.h[1]),b=Math.max(n.h[0],n.h[1]);
+  if(b-a<1e-9)return gas?(L<b?n.cap:0):(L>=b?n.cap:0);
+  const f=Math.max(0,Math.min(1,(L-a)/(b-a)));
+  return (gas?1-f:f)*n.cap;
+ }
+ const below=volBelowNode(n,L);
+ return gas?Math.max(0,n.cap-below):below;
+}
+function liquidSpeedMultiplier(n){
+ if(!n||n.type!=='acid')return 1;
+ return Math.max(.55,Math.min(1.8,1+(n.temperature-20)*.004));
+}
+const THERMAL_RATE=28;
+function acidContactSound(){if(!acidAlarm){acidAlarm=true;S.acid();shake(true);}}
+function phaseTransition(n){
+ if(n.type==='acid'||n.type==='empty')return;
+ const temp=n.temperature==null?20:n.temperature;
+ if(n.type==='water'){
+  if(temp<=0){n.type='ice';n.iceT=0;}
+  else if(temp>=100){n.type='steam';n.iceT=0;}
+ }else if(n.type==='ice'){
+  if(temp>0){n.type='water';n.iceT=0;if(temp>=100)n.type='steam';}
+ }else if(n.type==='steam'&&temp<100){
+  n.type='water';if(temp<=0)n.type='ice';
+ }
+}
+function updateThermalDevices(dt){
+ for(const e of ED){if(!e.deviceType||!e.active)continue;
+  const delta=(e.deviceType==='cooler'?-1:1)*THERMAL_RATE*dt;
+  for(const id of[e.a,e.b]){
+   const n=ND[nodeById(id)];if(!n||n.vol<=1e-7||n.type==='empty')continue;
+   n.temperature=Math.max(-50,Math.min(200,(n.temperature==null?defaultTemp(n.type):n.temperature)+delta));
+   phaseTransition(n);
+  }
+ }
+}
+function spreadConnectedAcid(){
+ const {adj}=components();let mixed=false;
+ const seen=new Set();
+ for(let seed=0;seed<ND.length;seed++){
+  if(ND[seed].type!=='acid'||ND[seed].vol<=1e-7||seen.has(seed))continue;
+  const q=[seed];seen.add(seed);
+  while(q.length){const v=q.pop(),n=ND[v];
+   if(n.type==='ice'||n.type==='steam')continue;
+   for(const[w]of adj[v]){
+    if(seen.has(w))continue;const m=ND[w];
+    if(m.type==='ice'||m.type==='steam')continue;
+    if(m.type==='water'&&m.vol>1e-7){m.type='acid';mixed=true;}
+    if(m.type==='water'||m.type==='acid'||m.type==='empty'){seen.add(w);q.push(w);}
+   }
+  }
+ }
+ if(mixed)acidContactSound();
+ return mixed;
+}
+let flowOut={},mv_list=[],ovFrom={};
+/* ---------- шаг симуляции (ТЗ §10: сообщающиеся сосуды, 30 Гц) ------ */
+function simStep(dt){
+ if(gameState!=='play'||constructorMode)return;
+ simTime+=dt;computeHeights();
+ updateThermalDevices(dt);
+ /* Legacy module B has a ten-second temporary freeze; constructor-made ice is temperature-controlled. */
+ for(const n of ND){if(n.type==='ice'&&n.iceT>0){
+  n.iceT-=dt;if(n.iceT<=0){n.iceT=0;n.type='water';n.temperature=Math.max(1,n.temperature||1);S.melt();}
+ }}
+ for(const n of ND)phaseTransition(n);
+ spreadConnectedAcid();
+ const freezeNodes=ND.filter(n=>n.freeze&&n.type==='ice'&&n.iceT>0);
+ freezeLeft=freezeNodes.length?Math.max(...freezeNodes.map(n=>n.iceT)):0;
+ freezeOn=ND.some(n=>n.freeze&&n.type==='ice');
+ const {comp,adj,cn}=components();
+ const levels=ND.map(n=>n.type==='empty'?-1e9:nodeLevel(n,n.vol,n.type));
+ const diff=new Array(ND.length).fill(0);flowOut={};mv_list.length=0;ovFrom={};
+ for(let c=0;c<cn;c++){
+  const group=[];for(let i=0;i<ND.length;i++)if(comp[i]===c)group.push(i);
+  if(!group.length)continue;
+  const hasSteam=group.some(i=>ND[i].type==='steam'&&ND[i].vol>1e-7);
+  const hasLiquid=group.some(i=>ND[i].type!=='empty'&&ND[i].type!=='ice'&&ND[i].type!=='steam'&&ND[i].vol>1e-7);
+  const mode=hasSteam&&!hasLiquid?'steam':'liquid';
+  const mem=group.filter(i=>ND[i].type!=='ice'&&!(hasLiquid&&ND[i].type==='steam'));
+  const totalV=mem.reduce((a,i)=>a+ND[i].vol,0);
+  if(totalV<=1e-6)continue;
+  let lo=1e9,hi=-1e9;
+  for(const i of mem){lo=Math.min(lo,...ND[i].h);hi=Math.max(hi,...ND[i].h);}
+  lo-=0.02;hi+=0.02;
+  for(let it=0;it<30;it++){
+   const L=(lo+hi)/2;let v=0;for(const i of mem)v+=volumeAtLevel(ND[i],L,mode);
+   if(v<totalV)lo=L;else hi=L;
+  }
+  const Lc=(lo+hi)/2;
+  for(const i of mem){const n=ND[i];
+   levels[i]=n.vol>=n.cap-1e-6?(mode==='steam'?-1e9:1e9):(n.vol<=1e-6?(mode==='steam'?1e9:-1e9):Lc);
+   diff[i]=volumeAtLevel(n,Lc,mode)-n.vol;
+  }
+  /* Gas moves only upward; the ordinary hydrostatic solver handles liquid nodes. */
+  if(mode==='steam')continue;
+  for(let pass=0;pass<3;pass++){
+   for(const e of ED){
+    if(!edgePassable(e))continue;
+    const i=nodeById(e.a),j=nodeById(e.b);
+    if(comp[i]!==c||comp[j]!==c||ND[i].type==='steam'||ND[j].type==='steam')continue;
+    let from=i,to=j;if(diff[from]>0&&diff[to]<0){from=j;to=i;}
+    if(!edgeFlowAllowed(e,from,to))continue;
+    if(diff[from]>=-1e-7||diff[to]<=1e-7)continue;
+    const mv=Math.min(-diff[from],diff[to],FLOW_CAP*liquidSpeedMultiplier(ND[from])*dt);
+    if(mv<=1e-6)continue;
+    const actual=applyMove(from,to,mv);if(actual<=1e-7)continue;
+    mv_list.push(actual);diff[from]+=actual;diff[to]-=actual;flowOut[from]=to;
+   }
+  }
+ }
+ pushFlows(dt);
+ /* Spill over an ice crest; the ice itself remains an impermeable wall. */
+ const byIce={};
+ for(const ov of overflowEdges(levels))(byIce[ov.ice]=byIce[ov.ice]||[]).push(ov);
+ for(const k in byIce){
+  const list=byIce[k],mi=+k,upSide=upstreamSide(mi),ov=list.find(o=>o.from===upSide);
+  if(!ov)continue;
+  const un=ND[ov.from],head=levels[ov.from]-ov.crest;if(head<=0||un.vol<=1e-7)continue;
+  let dest=-1;for(const[u]of neighborsOf(mi))if(ND[u].type!=='ice'){dest=u;break;}
+  if(dest<0)continue;
+  let cur=dest;const seen=new Set([ov.from,dest]);
+  for(let hop=0;hop<8&&ND[cur].vol>ND[cur].cap-1e-4;hop++){
+   let nxt=-1,bh=-1e9;
+   for(const[v]of neighborsOf(cur)){
+    if(seen.has(v)||ND[v].type==='ice')continue;
+    const e=edgeBetween(cur,v);if(!e||!edgePassable(e))continue;
+    if(Math.max(...ND[v].h)>bh){bh=Math.max(...ND[v].h);nxt=v;}
+   }
+   if(nxt<0)break;seen.add(nxt);cur=nxt;
+  }
+  dest=cur;const nt=ND[dest];
+  const mv=Math.min(FLOW_CAP*dt*Math.min(3,0.5+head*4),un.vol,nt.cap-nt.vol);
+  if(mv>1e-6){const actual=applyMove(ov.from,dest,mv);if(actual>1e-7){mv_list.push(actual);flowOut[ov.from]=dest;ovFrom[ov.from]=dest;}}
+ }
+ flowNow=mv_list.reduce((a,b)=>a+b,0)/dt;
+ /* No continuous/random water hiss in v0.5; feedback is event-driven only. */
+ if(flowGain&&AC)flowGain.gain.value=0;
+ ballStep(dt,levels);
+ if(!ball.dead){
+  const f=ND[idxF()],finishNeed=Math.min(0.012,f.cap*0.30);
+  if(ball.node===idxF()&&f.vol>finishNeed)winT+=dt;else winT=Math.max(0,winT-dt*2);
+  if(winT>0.6){gameState='win';onWin();}
+  if(ballInLiquid()&&liquidAtBall()==='acid'){
+   hurtT+=dt;ball.hurt=true;
+   if(hurtT>=1){ball.dead=true;gameState='lose';onLose();}
+  }else{hurtT=0;ball.hurt=false;}
+ }
+}
+function edgeBetween(i,j){for(const e of ED){const a=nodeById(e.a),b=nodeById(e.b);
+ if((a===i&&b===j)||(a===j&&b===i))return e;}return null;}
+/* сосед ледяного узла, со стороны которого приходит приток (путь к старту S) */
+function upstreamSide(mi){
+ const nb=[];ED.forEach(e=>{const a=nodeById(e.a),b=nodeById(e.b);
+  if(a===mi)nb.push(b);else if(b===mi)nb.push(a);});
+ if(nb.length<2)return nb[0]??-1;
+ const reach=(start,avoid)=>{const seen=new Set([avoid,start]);const st=[start];
+  while(st.length){const v=st.pop();
+   for(const[w]of neighborsOf(v)){if(seen.has(w)||ND[w].type==='ice')continue;seen.add(w);st.push(w);}}
+  return seen;};
+ const s0=reach(nb[0],mi);
+ return s0.has(idxS())?nb[0]:nb[1];
+}
+function pushFlows(dt){
+ const own=ND.map(n=>nodeLevel(n,n.vol,n.type));
+ const maxh=ND.map(n=>Math.max(...n.h));
+ for(let src=0;src<ND.length;src++){
+  const ns=ND[src];if(ns.vol<=1e-7)continue;
+  if(ns.type==='steam'){
+   let best=-1,bestH=-1e9;
+   for(const[nb,ei]of neighborsOf(src)){
+    const e=ED[ei],nt=ND[nb];if(!edgePassable(e)||!edgeFlowAllowed(e,src,nb))continue;
+    if(nt.type==='ice'||nt.type==='water'||nt.type==='acid'||nt.vol>=nt.cap-1e-7)continue;
+    const top=Math.max(...nt.h);if(top<maxh[src]-0.025)continue;
+    if(top>bestH){bestH=top;best=nb;}
+   }
+   if(best>=0){const nt=ND[best],mv=Math.min(FLOW_CAP*dt*1.18,ns.vol,nt.cap-nt.vol);
+    const actual=applyMove(src,best,mv);if(actual>1e-7){mv_list.push(actual);flowOut[src]=best;}}
+   continue;
+  }
+  if(ns.type==='ice')continue;
+  const la=own[src]===1e9?maxh[src]:own[src];if(la===-1e9)continue;
+  let cur=src;const seen=new Set([src]),path=[];let dest=-1;
+  for(let hop=0;hop<12;hop++){
+   let bFull=-1,bFullH=1e9,bOpen=-1,bOpenH=1e9;
+   for(const[nb,ei]of neighborsOf(cur)){
+    if(seen.has(nb))continue;const e=ED[ei];if(!e||!edgePassable(e)||!edgeFlowAllowed(e,cur,nb))continue;
+    const nbn=ND[nb],ob=own[nb]===1e9?maxh[nb]:(own[nb]===-1e9?Math.min(...nbn.h):own[nb]);
+    if(nbn.vol<nbn.cap-1e-7){if(ob<la-1e-4&&ob<bOpenH){bOpen=nb;bOpenH=ob;}}
+    else if(maxh[nb]<=la+1e-3&&maxh[nb]<bFullH){bFull=nb;bFullH=maxh[nb];}
+   }
+   if(bOpen>=0){dest=bOpen;break;}
+   if(bFull>=0){seen.add(bFull);path.push([cur,bFull]);cur=bFull;continue;}
+   break;
+  }
+  if(dest<0)continue;
+  const nt=ND[dest],mv=Math.min(FLOW_CAP*liquidSpeedMultiplier(ns)*dt,ns.vol,nt.cap-nt.vol);
+  if(mv>1e-6){const actual=applyMove(src,dest,mv);if(actual>1e-7){mv_list.push(actual);
+   for(const[a,b]of path)flowOut[a]=b;flowOut[cur]=dest;if(!flowOut[src])flowOut[src]=dest;}}
+ }
+}
+function applyMove(i,j,mv){
+ const nf=ND[i],nt=ND[j];if(!nf||!nt||mv<=1e-8||nf.vol<=1e-8)return 0;
+ if(nf.type==='ice'||nt.type==='ice'||phasePairBlocked(nf,nt))return 0;
+ const contact=(nf.type==='acid'&&nt.type==='water')||(nf.type==='water'&&nt.type==='acid');
+ if(nt.vol<=1e-7||nt.type==='empty'){
+  nt.type=nf.type;nt.temperature=nf.temperature==null?defaultTemp(nf.type):nf.temperature;
+ }else if(contact){
+  nf.type='acid';nt.type='acid';
+ }else if(nf.type!==nt.type)return 0;
+ const srcTemp=nf.temperature==null?defaultTemp(nf.type):nf.temperature;
+ const dstVol=nt.vol,dstTemp=nt.temperature==null?defaultTemp(nt.type):nt.temperature;
+ if(dstVol>1e-7&&nt.type===nf.type)nt.temperature=(dstTemp*dstVol+srcTemp*mv)/(dstVol+mv);
+ const actual=Math.min(mv,nf.vol,nt.cap-nt.vol);if(actual<=1e-8)return 0;
+ nf.vol-=actual;nt.vol+=actual;
+ if(nf.vol<=1e-7){nf.vol=0;nf.type='empty';}
+ if(contact){acidContactSound();spreadConnectedAcid();}
+ else if(nf.type==='acid'||nt.type==='acid')spreadConnectedAcid();
+ return actual;
+}
+function acidMix(){spreadConnectedAcid();}
+function ballInLiquid(){const n=ND[ball.node];return !!n&&n.vol>1e-6&&n.type!=='empty';}
+function liquidAtBall(){return ND[ball.node]?ND[ball.node].type:'empty';}
+/* ---------- Ума: позиция вдоль сплайна трубы (ТЗ §5) ---------- */
+function ballStep(dt,levels){
+ const n=ND[ball.node];
+ const fill=n.cap>0?n.vol/n.cap:0;
+ /* перелив через ледяной гребень: вода реально переливается с нашего узла —
+    Уму несёт через ледяной мост на другую сторону (ТЗ §6.2: лёд-мост) */
+ const ovD=ovFrom[ball.node];
+ if(ovD!=null&&ND[ovD].type!=='ice'){
+  const iceNb=neighborsOf(ball.node).find(([nb])=>ND[nb].type==='ice');
+  if(iceNb){
+   const iceEnd=endToward(ball.node,iceNb[0]);
+   if(Math.abs(ball.u-iceEnd)<n.L*0.4){transferBall(ovD);return;}
+  }
+ }
+ /* целевая точка и переносы */
+ let target=null,speed=0.35;
+ const out=flowOut[ball.node];
+ if(n.type==='ice'){ /* страховка: Уму не может быть во льду — выталкиваем в приток */
+  const up=upstreamSide(ball.node);
+  if(up!=null&&up>=0&&ND[up].type!=='ice'){transferBall(up);return;}
+  target=runPoint(n,n.L*0.5);speed=0.2;
+ } else if(out!=null&&ND[out].type!=='ice'){
+  /* вода выходит из узла — Уму несёт потоком к выходному концу */
+  const te=endToward(ball.node,out);
+  target=runPoint(n,te);speed=0.55;
+  if(Math.abs(ball.u-te)<0.06){transferBall(out);return;}
+ } else if(fill>=0.2){
+  const L=levels[ball.node];
+  if(L===1e9){ target=runPoint(n,n.h[0]>n.h[n.pts.length-1]?0:n.L); }
+  else{
+   const runs=submergedRuns(n,L);
+   if(runs.length){
+    let best=null,bd=1e9;
+    for(const r of runs){
+     for(const c of[r[0],r[1]]){           /* конец интервала, близкий к уровню = поверхность */
+      const hp=worldH(runPoint(n,c));
+      const d=Math.abs(c-ball.u)+Math.abs(hp-L)*2;
+      if(d<bd){bd=d;best=c;}}}
+    target=runPoint(n,best);speed=0.45;
+   } else target=runPoint(n,n.L);
+  }
+  /* узел полон, стока нет, но у соседа сверху уровень выше нашего верха — всплываем туда */
+  if(fill>=0.95&&out==null){
+   const hiEnd=n.h[0]>n.h[n.pts.length-1]?0:1;
+   const myEnd=n.pts[hiEnd===0?0:n.pts.length-1];
+   for(const[m]of neighborsOf(ball.node)){
+    const gateEdge=edgeBetween(ball.node,m);if(!gateEdge||!edgePassable(gateEdge,true))continue;
+    const mm=ND[m];if(mm.type==='ice'||mm.vol<=1e-6)continue;
+    const ends=[mm.pts[0],mm.pts[mm.pts.length-1]];
+    if(!ends.some(p=>(p[0]-myEnd[0])**2+(p[1]-myEnd[1])**2+(p[2]-myEnd[2])**2<0.02))continue;
+    const ml=nodeLevel(mm,mm.vol);
+    if(ml>=n.h[hiEnd]-1e-3&&Math.abs(ball.u-(hiEnd===0?0:n.L))<0.07){transferBall(m);return;}
+   }
+  }
+ } else {
+  /* мало воды: лежим на дне; если есть сток — нас несёт поток */
+  let lowT=0,lowH=1e9;for(let t=0;t<=n.L+1e-9;t+=n.L/8){const h=worldH(runPoint(n,t));if(h<lowH){lowH=h;lowT=t;}}
+  target=runPoint(n,lowT);speed=0.5;
+ }
+ /* движение к цели по дуге */
+ const tp=arcOfPoint(n,target);
+ const d=tp-ball.u;
+ const mx=speed*(0.4+Math.min(1,flowNow*8))*dt*2.2;
+ ball.u+=Math.max(-mx,Math.min(mx,d));
+ ball.u=Math.max(0,Math.min(n.L,ball.u));
+ const lp=runPoint(n,ball.u);
+ const wp=worldPoint(lp);
+ /* плавное следование рендера */
+ ball.px[0]+=(wp[0]-ball.px[0])*Math.min(1,dt*10);
+ ball.px[1]+=(wp[1]-ball.px[1])*Math.min(1,dt*10);
+ ball.px[2]+=(wp[2]-ball.px[2])*Math.min(1,dt*10);
+ ball.face=Math.max(-1,Math.min(1,d*4));
+ ball.blink=(ball.blink+dt)%3.4;
+ ball.bub+=dt;
+}
+function arcOfPoint(n,p){let best=0,bd=1e9;
+ for(let t=0;t<=n.L+1e-9;t+=n.L/24){const q=runPoint(n,t);
+  const d=(q[0]-p[0])**2+(q[1]-p[1])**2+(q[2]-p[2])**2;if(d<bd){bd=d;best=t;}}
+ return best;}
+function neighborsOf(i){
+ const res=[];ED.forEach((e,ei)=>{const a=nodeById(e.a),b=nodeById(e.b);
+  if(a===i)res.push([b,ei]);else if(b===i)res.push([a,ei]);});
+ return res;}
+/* длина дуги конца узла i, который геометрически смежен с узлом j */
+function endToward(i,j){
+ const n=ND[i],m=ND[j];
+ const d0=Math.min(...m.pts.map(p=>(p[0]-n.pts[0][0])**2+(p[1]-n.pts[0][1])**2+(p[2]-n.pts[0][2])**2));
+ const d1=Math.min(...m.pts.map(p=>(p[0]-n.pts[n.pts.length-1][0])**2+(p[1]-n.pts[n.pts.length-1][1])**2+(p[2]-n.pts[n.pts.length-1][2])**2));
+ return d0<d1?0:n.L;
+}
+function ovDest(ov){
+ for(const[u]of ov.nb)if(u!==ov.from&&ND[u].type!=='ice')return u;
+ return ov.from;
+}
+function downstreamNeighbor(i){
+ const n=ND[i];let lowT=0,lowH=1e9;
+ for(let t=0;t<=n.L+1e-9;t+=n.L/8){const h=worldH(runPoint(n,t));if(h<lowH){lowH=h;lowT=t;}}
+ const atEnd=lowT>n.L*0.5?1:(lowT<n.L*0.5?0:-1);if(atEnd<0)return -1;
+ for(const[j,ei]of neighborsOf(i)){const e=ED[ei];
+  if(!edgePassable(e,true))continue;
+  if(ND[j].type==='ice')continue;
+  /* конец узла i совпадает с концом j? */
+  const myEnd=atEnd===1?n.pts[n.pts.length-1]:n.pts[0];
+  const m=ND[j];const theirEnds=[m.pts[0],m.pts[m.pts.length-1]];
+  if(theirEnds.some(p=>(p[0]-myEnd[0])**2+(p[1]-myEnd[1])**2+(p[2]-myEnd[2])**2<0.02)){
+   if(Math.min(...ND[j].h)<lowH+0.05)return j;}
+ }
+ return -1;
+}
+function upstreamCarry(i,levels){
+ /* если узел полон и жидкость течёт дальше — плывём в соседа сверху/дальше */
+ const n=ND[i];if(n.vol<n.cap-1e-6)return -1;
+ for(const[j,ei]of neighborsOf(i)){const e=ED[ei];
+  if(!edgePassable(e,true))continue;if(ND[j].type==='ice')continue;
+  if(ND[j].vol>1e-6||n.vol>1e-6){
+   const m=ND[j];const myTop=n.h[0]>n.h[n.h.length-1]?0:n.pts.length-1;
+   const myEnd=n.pts[myTop];
+   const theirEnds=[m.pts[0],m.pts[m.pts.length-1]];
+   if(theirEnds.some(p=>(p[0]-myEnd[0])**2+(p[1]-myEnd[1])**2+(p[2]-myEnd[2])**2<0.02))return j;}
+ }
+ return -1;
+}
+function transferBall(j){
+ const m=ND[j];const prev=ND[ball.node];
+ /* заходим с того конца, который ближе к прошлому узлу */
+ const pe=runPoint(prev,ball.u);
+ const d0=(m.pts[0][0]-pe[0])**2+(m.pts[0][1]-pe[1])**2+(m.pts[0][2]-pe[2])**2;
+ const d1=(m.pts[m.pts.length-1][0]-pe[0])**2+(m.pts[m.pts.length-1][1]-pe[1])**2+(m.pts[m.pts.length-1][2]-pe[2])**2;
+ ball.node=j;ball.u=d0<d1?0:m.L;
+}
+
+/* ================= РЕНДЕР: Canvas 2D, painter's algorithm ============= */
+const cv=document.getElementById('gl'),ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1,bgc=null,draws=0,fps=60,fpsE=60,statOn=true;
+const FOV=45*Math.PI/180;
+function resize(){
+ DPR=Math.min(window.devicePixelRatio||1,(matchMedia('(pointer:coarse)').matches)?1.5:2);
+ W=cv.clientWidth||innerWidth;H=cv.clientHeight||innerHeight;
+ if(W<2||H<2){W=innerWidth;H=innerHeight;}
+ cv.width=Math.max(2,W*DPR);cv.height=Math.max(2,H*DPR);
+ fitCamera(false);
+ buildBG();
+}
+function fitCamera(resetZoom){
+ if(W<2||H<2)return;
+ const aspect=W/H,hfov=2*Math.atan(Math.tan(FOV/2)*aspect);
+ const halfW=1.22,halfH=1.08;
+ const dW=halfW/(Math.tan(hfov/2)*0.90);
+ const dH=halfH/(Math.tan(FOV/2)*0.72);
+ const nextBase=Math.max(3.45,dW,dH);
+ const zoom=resetZoom?1:(cam.base?cam.dist/cam.base:1);
+ cam.base=nextBase;cam.min=Math.max(2.25,nextBase*0.66);cam.max=nextBase*1.42;
+ cam.zoom=zoom;cam.dist=Math.max(cam.min,Math.min(cam.max,nextBase*zoom));
+ cam.targetY=STRUCT_Y+RIG_PIVOT[1]-0.045;
+}
+function setZoom(dist){cam.dist=Math.max(cam.min,Math.min(cam.max,dist));cam.zoom=cam.dist/cam.base;}
+addEventListener('resize',resize);
+addEventListener('orientationchange',()=>setTimeout(resize,120));
+if(window.ResizeObserver)new ResizeObserver(()=>{if(gameScreen())resize();}).observe(document.getElementById('stage'));
+function mvp(){
+ const asp=W/H;
+ return mMul(mPersp(FOV,asp,0.1,60),
+  mMul(mTrans(0,0,-cam.dist),
+   mMul(mRotX(cam.el),
+    mMul(mRotY(cam.az),mTrans(0,-cam.targetY,0)))));
+}
+let MVP=mI();
+function proj(p){const v=tP(MVP,p);
+ return [(v[0]*.5+.5)*W,(1-(v[1]*.5+.5))*H,v[3]];}
+function ppmAt(w){return (H/2)*(1/Math.tan(FOV/2))/Math.max(0.3,w);}
+
+/* ---------- фон: лабораторный комплекс «ГидроЛаб-7» (вместо космоса
+   Мат-Бум 3: те же слои-окружение вокруг арены + параллакс от камеры) -- */
+function buildBG(){
+ const pw=W+220,ph=H;
+ bgc=document.createElement('canvas');bgc.width=pw*DPR;bgc.height=ph*DPR;
+ const g=bgc.getContext('2d');g.scale(DPR,DPR);
+ const dark=document.documentElement.dataset.theme==='dark';
+ /* стены */
+ let gr=g.createLinearGradient(0,0,0,ph);
+ if(dark){gr.addColorStop(0,'#0a1a26');gr.addColorStop(.55,'#081420');gr.addColorStop(1,'#050d15');}
+ else{gr.addColorStop(0,'#eef6fb');gr.addColorStop(.55,'#dceaf3');gr.addColorStop(1,'#c8dbe8');}
+ g.fillStyle=gr;g.fillRect(0,0,pw,ph);
+ /* мягкие пятна света (аналог туманностей mb3) */
+ const glow=(x,y,r,c)=>{const rg=g.createRadialGradient(x,y,0,x,y,r);rg.addColorStop(0,c);rg.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=rg;g.fillRect(x-r,y-r,r*2,r*2);};
+ glow(pw*.25,ph*.06,ph*.5,dark?'rgba(60,190,230,.10)':'rgba(255,255,255,.55)');
+ glow(pw*.72,ph*.04,ph*.45,dark?'rgba(60,190,230,.08)':'rgba(255,255,255,.45)');
+ glow(pw*.5,ph*.62,ph*.6,dark?'rgba(20,120,160,.07)':'rgba(190,230,245,.5)');
+ /* панели стен */
+ g.strokeStyle=dark?'rgba(120,200,230,.07)':'rgba(120,160,185,.25)';g.lineWidth=1;
+ for(let y=ph*.10;y<ph*.80;y+=ph*.085){g.beginPath();g.moveTo(0,y);g.lineTo(pw,y);g.stroke();}
+ for(let x=0;x<pw;x+=pw*.11){g.beginPath();g.moveTo(x,ph*.10);g.lineTo(x,ph*.80);g.stroke();}
+ /* окна-аквариумы с резервуарами */
+ for(let i=0;i<3;i++){
+  const x=pw*(.14+i*.30),y=ph*.20,w=pw*.17,h=ph*.22;
+  g.fillStyle=dark?'rgba(8,30,44,.9)':'rgba(190,225,240,.9)';
+  rr(g,x,y,w,h,10);g.fill();
+  g.strokeStyle=dark?'rgba(90,200,235,.35)':'rgba(120,160,185,.6)';g.lineWidth=3;rr(g,x,y,w,h,10);g.stroke();
+  /* колба внутри */
+  const cx=x+w/2,cy=y+h*.62,cr=Math.min(w,h)*.30;
+  const wg=g.createLinearGradient(0,cy-cr,0,cy+cr);
+  if(dark){wg.addColorStop(0,'rgba(40,196,232,.30)');wg.addColorStop(1,'rgba(20,120,170,.45)');}
+  else{wg.addColorStop(0,'rgba(120,220,245,.75)');wg.addColorStop(1,'rgba(60,170,215,.8)');}
+  g.fillStyle=wg;g.beginPath();g.arc(cx,cy,cr,0,7);g.fill();
+  g.strokeStyle=dark?'rgba(140,230,255,.5)':'rgba(255,255,255,.9)';g.lineWidth=2;
+  g.beginPath();g.arc(cx,cy,cr,0,7);g.stroke();
+  g.fillStyle=dark?'rgba(160,240,255,.5)':'rgba(255,255,255,.8)';
+  for(let b=0;b<4;b++){g.beginPath();g.arc(cx-cr*.4+b*cr*.27,cy+cr*.4-((b*37)%50)/50*cr*.8,cr*.06,0,7);g.fill();}
+ }
+ /* мониторы */
+ for(let i=0;i<2;i++){
+  const x=pw*(.06+i*.78),y=ph*.50,w=pw*.10,h=ph*.10;
+  g.fillStyle=dark?'#04121c':'#123046';rr(g,x,y,w,h,6);g.fill();
+  g.strokeStyle=dark?'rgba(80,220,180,.5)':'rgba(61,220,132,.8)';g.lineWidth=2;
+  g.beginPath();for(let s=0;s<=20;s++){const sx=x+6+(w-12)*s/20,sy=y+h/2+Math.sin(s*1.1+i*2)*h*.22;
+   s?g.lineTo(sx,sy):g.moveTo(sx,sy);}g.stroke();
+ }
+ /* трубы на стене */
+ g.lineCap='round';
+ g.strokeStyle=dark?'rgba(150,220,245,.13)':'rgba(255,255,255,.75)';g.lineWidth=ph*.022;
+ g.beginPath();g.moveTo(0,ph*.135);g.lineTo(pw,ph*.135);g.stroke();
+ g.strokeStyle=dark?'rgba(150,220,245,.09)':'rgba(230,242,250,.8)';g.lineWidth=ph*.014;
+ g.beginPath();g.moveTo(0,ph*.165);g.lineTo(pw*.55,ph*.165);g.lineTo(pw*.55,ph*.42);g.stroke();
+ for(let i=0;i<8;i++){g.fillStyle=dark?'rgba(150,220,245,.18)':'rgba(180,205,220,.9)';
+  g.fillRect(pw*(.05+i*.125)-3,ph*.135-ph*.016,6,ph*.032);}
+ /* табличка */
+ g.fillStyle=dark?'rgba(140,225,250,.55)':'rgba(40,90,115,.65)';
+ g.font='700 '+Math.round(ph*.020)+'px Segoe UI, Arial';g.textAlign='center';
+ g.fillText('ГИДРОЛАБ-7 · HYDROLAB-7 · СЕКТОР B',pw*.5,ph*.085);
+ /* пол */
+ gr=g.createLinearGradient(0,ph*.80,0,ph);
+ if(dark){gr.addColorStop(0,'#0a1620');gr.addColorStop(1,'#04090e');}
+ else{gr.addColorStop(0,'#b9cdda');gr.addColorStop(1,'#93aebf');}
+ g.fillStyle=gr;g.fillRect(0,ph*.80,pw,ph*.20);
+ g.strokeStyle=dark?'rgba(120,200,230,.06)':'rgba(255,255,255,.35)';g.lineWidth=1;
+ for(let i=0;i<7;i++){g.beginPath();g.moveTo(pw*.5+(i-3)*pw*.09,ph*.80);g.lineTo(pw*.5+(i-3)*pw*.22,ph);g.stroke();}
+}
+function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+/* пылинки в лучах света (аналог звёзд mb3) */
+const MOTES=Array.from({length:34},(_,i)=>({x:Math.random(),y:Math.random(),s:.4+Math.random()*1.2,p:Math.random()*7}));
+function drawBG(t){
+ const dark=document.documentElement.dataset.theme==='dark';
+ const ox=Math.max(-70,Math.min(70,labYaw*42));
+ ctx.drawImage(bgc,ox-110,-20,W+220,H+40);
+ ctx.save();
+ for(const m of MOTES){
+  const x=((m.x+t*0.008*m.s)%1)*(W+60)-30, y=((m.y+Math.sin(t*.3+m.p)*.01+ t*0.004*m.s)%1)*H;
+  ctx.fillStyle=dark?'rgba(160,230,255,'+(0.10+0.10*Math.sin(t*2+m.p))+')':'rgba(255,255,255,'+(0.35+0.25*Math.sin(t*2+m.p))+')';
+  ctx.beginPath();ctx.arc(x,y,m.s,0,7);ctx.fill();}
+ ctx.restore();
+}
+/* ---------- стол (деревянный, ТЗ §2.1) ---------- */
+function drawTable(){
+ const c=[[-1.5,TABLE_Y,-1.0],[1.5,TABLE_Y,-1.0],[1.5,TABLE_Y,1.0],[-1.5,TABLE_Y,1.0]].map(proj);
+ const dark=document.documentElement.dataset.theme==='dark';
+ ctx.save();
+ ctx.beginPath();ctx.moveTo(c[0][0],c[0][1]);for(let i=1;i<4;i++)ctx.lineTo(c[i][0],c[i][1]);ctx.closePath();
+ const gr=ctx.createLinearGradient(0,Math.min(...c.map(p=>p[1])),0,Math.max(...c.map(p=>p[1])));
+ if(dark){gr.addColorStop(0,'#4a3524');gr.addColorStop(1,'#2b1d12');}
+ else{gr.addColorStop(0,'#b98d5f');gr.addColorStop(1,'#8f6a44');}
+ ctx.fillStyle=gr;ctx.fill();draws++;
+ /* кромка стола */
+ const f=[c[1],c[2]];
+ ctx.beginPath();ctx.moveTo(f[0][0],f[0][1]);ctx.lineTo(f[1][0],f[1][1]);
+ ctx.lineTo(f[1][0],f[1][1]+H*0.03);ctx.lineTo(f[0][0],f[0][1]+H*0.03);ctx.closePath();
+ ctx.fillStyle=dark?'#1d130b':'#6d4f30';ctx.fill();draws++;
+ /* доски */
+ ctx.strokeStyle=dark?'rgba(0,0,0,.25)':'rgba(90,60,30,.35)';ctx.lineWidth=1;
+ for(let i=1;i<5;i++){const a=proj([-1.5,TABLE_Y,-1.0+0.4*i]),b=proj([1.5,TABLE_Y,-1.0+0.4*i]);
+  ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();draws++;}
+ ctx.restore();
+ /* тень под конструкцией */
+ const s=proj([0,TABLE_Y+0.012,0]);
+ ctx.save();ctx.globalAlpha=.30;
+ const rg=ctx.createRadialGradient(s[0],s[1],0,s[0],s[1],W*0.28);
+ rg.addColorStop(0,'rgba(10,25,35,.8)');rg.addColorStop(1,'rgba(10,25,35,0)');
+ ctx.fillStyle=rg;ctx.beginPath();ctx.ellipse(s[0],s[1],W*0.28,W*0.075,0,0,7);ctx.fill();draws++;
+ ctx.restore();
+}
+/* ---------- трубы: модули style_01 «Pixar Glass» (pipes-lib v0.5) ----
+   Узел графа = модуль(и) набора: прямая S/M/L, угол 90°, муфта, торец.
+   Жидкость режется по линии мирового уровня (учитывает поворот стенда). */
+const COL={water:'rgba(40,140,255,',acid:'rgba(84,224,106,',ice:'rgba(200,235,255,'};
+function acidPalette(temp,dark){
+ const f=Math.max(0,Math.min(1,((temp==null?20:temp)+50)/250));
+ const mix=(a,b)=>a.map((v,i)=>Math.round(v+(b[i]-v)*f));
+ const c1=mix([71,111,48],[218,255,112]),c2=mix([18,80,48],[43,166,67]),cc=mix([93,175,73],[181,250,101]);
+ return {a:`rgba(${c1.join(',')},.96)`,b:`rgba(${c2.join(',')},.96)`,core:`rgba(${cc.join(',')},.72)`,crest:'rgba(242,255,204,.78)',bubble:'rgba(255,255,255,.35)'};
+}
+const MOD_OF_NODE={
+ S:['резервуар · старт'],  A1:['Прямая S'],  J:['Муфта'],
+ B1:['Прямая M + Угол 90° + Прямая S'], UL:['Прямая S'],
+ UM:['Прямая M · модуль заморозки B'], UR:['Прямая S'],
+ C1:['Прямая M + Угол 90°'], F:['Торец'],
+ AC:['резервуар · кислота'], AL:['Прямая M + Угол 90° + Прямая S']
+};
+/* муфты-кольца на изломах (визуальные стыки модулей набора) */
+function bendCollars(P,px){
+ const out=[];
+ for(let i=1;i<P.length-1;i++){
+  const a=P[i-1],b=P[i],c=P[i+1];
+  const a1=Math.atan2(b[1]-a[1],b[0]-a[0]),a2=Math.atan2(c[1]-b[1],c[0]-b[0]);
+  let d=Math.abs(a2-a1);if(d>Math.PI)d=2*Math.PI-d;
+  if(d>0.4)out.push({p:b,ang:a2-Math.PI/2,w:px*0.98});
+ }
+ return out;
+}
+/* срез жидкости по линии мирового уровня L */
+function runsByWorldLevel(PP,P,L,above=false){
+ if(!above&&L===1e9)return[{pts:P}];
+ if(above&&L===-1e9)return[{pts:P}];
+ if((!above&&L===-1e9)||(above&&L===1e9)||!P||P.length<2)return[];
+ const runs=[];let cur=null;
+ const begin=(pt,surf)=>{cur={pts:[pt],surfs:surf?[0]:[]};runs.push(cur);};
+ const finish=(pt,surf)=>{if(!cur)begin(pt,false);else cur.pts.push(pt);if(surf)cur.surfs.push(1);cur=null;};
+ for(let i=0;i<P.length-1;i++){
+  const a=P[i],b=P[i+1],h0=worldH(PP[i]),h1=worldH(PP[i+1]);
+  const in0=above?h0>=L:h0<=L,in1=above?h1>=L:h1<=L;
+  if(in0&&in1){if(!cur)begin(a,false);cur.pts.push(b);}
+  else if(in0&&!in1){const f=(L-h0)/(h1-h0);finish([a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f],true);}
+  else if(!in0&&in1){const f=(L-h0)/(h1-h0);begin([a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f],true);cur.pts.push(b);}
+  else cur=null;
+ }
+ return runs.filter(r=>r.pts.length>1);
+}
+/* сосед-узел, к которому стыкуется торец (0=начало, 1=конец) */
+function endNeighbor(n,which){
+ const p=which?n.pts[n.pts.length-1]:n.pts[0];
+ for(const m of ND){ if(m===n)continue;
+  for(const q of m.pts) if(Math.abs(q[0]-p[0])<1e-6&&Math.abs(q[1]-p[1])<1e-6&&Math.abs(q[2]-p[2])<1e-6) return m;
+ }
+ return null;
+}
+function drawNode(n,t,pass){
+ const dark=document.documentElement.dataset.theme==='dark';
+ const st=n.hidden?'surprise':n.type;
+ if(n.type!=='empty'&&n.type!=='ice'&&n.vol<=1e-6)return;
+ const PP=n.pts,L=(n.type==='ice')?1e9:nodeLevel(n,n.vol,n.type);
+ const localPath=PLIB.roundPoly(PP.map(p=>[p[0],p[1]]),0.12,7).map(p=>[p[0],p[1],PP[0][2]]);
+ const P=localPath.map(p=>proj(worldPoint(p)));
+ const wMid=P.reduce((a,p)=>a+p[2],0)/P.length;
+ const px=ppmAt(wMid)*PIPE_R*2,pxi=ppmAt(wMid)*PIPE_RI*2;
+ const runs=(n.type==='empty'||st==='surprise')?[]:runsByWorldLevel(localPath,P,L,n.type==='steam');
+ const nbH=endNeighbor(n,0),nbT=endNeighbor(n,1);
+ const rimH=!nbH||nbH.type!==n.type,rimT=!nbT||nbT.type!==n.type;
+ const color=n.type==='acid'?acidPalette(n.temperature,dark):null;
+ PLIB.drawTube(ctx,{pts:P,wOut:px,wIn:pxi,state:st,runs:runs,color,
+  t:t,seed:n.id,dark:dark,rims:[rimH,rimT],collars:bendCollars(P,px),
+  skipLiquid:pass==='glass',liquidOnly:pass==='liquid'});
+ draws++;
+}
+/* ---------- стартовая и финишная батисферные камеры ---------- */
+const CHAMBERS={
+ start:{center:[-.62,1.16,0],r:.26,port:[0,-1,0],tone:'water',titleRu:'СТАРТОВАЯ КАМЕРА',titleEn:'LAUNCH CHAMBER'},
+ acid:{center:[.62,1.14,0],r:.215,port:[0,-1,0],tone:'acid',titleRu:'КИСЛОТА',titleEn:'ACID BAY'},
+ finish:{center:[.92,.64,0],r:.27,port:[-.91,.40,0],tone:'finish',titleRu:'КАМЕРА СПАСЕНИЯ',titleEn:'RESCUE CHAMBER'}
+};
+function normalize3(v){const l=Math.hypot(v[0],v[1],v[2])||1;return[v[0]/l,v[1]/l,v[2]/l];}
+function cross3(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function cameraDirWorld(){
+ const ce=Math.cos(cam.el),se=Math.sin(cam.el),ca=Math.cos(cam.az),sa=Math.sin(cam.az);
+ return normalize3([-sa*ce,se,ca*ce]);
+}
+function drawLocalPath(localPts,color,width,alpha,close,fill){
+ if(!localPts||localPts.length<2)return;
+ const pts=localPts.map(p=>proj(worldPoint(p)));
+ ctx.save();ctx.globalAlpha=alpha==null?1:alpha;ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
+ for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);if(close)ctx.closePath();
+ if(fill){ctx.fillStyle=fill;ctx.fill();}if(color){ctx.strokeStyle=color;ctx.lineWidth=width||1.5;ctx.lineJoin='round';ctx.lineCap='round';ctx.stroke();}
+ ctx.restore();draws++;
+}
+function sphereLoop(center,axisA,axisB,r,segments=36){
+ const out=[];for(let i=0;i<=segments;i++){const a=i/segments*Math.PI*2;
+  out.push([center[0]+(axisA[0]*Math.cos(a)+axisB[0]*Math.sin(a))*r,
+            center[1]+(axisA[1]*Math.cos(a)+axisB[1]*Math.sin(a))*r,
+            center[2]+(axisA[2]*Math.cos(a)+axisB[2]*Math.sin(a))*r]);}return out;
+}
+function drawWorldPort(center,normal,r,kind,label,t,closed){
+ const n=normalize3(normal);
+ const ref=Math.abs(n[1])<.88?[0,1,0]:[1,0,0];
+ const u=normalize3(cross3(n,ref)),v=normalize3(cross3(n,u));
+ const c=[center[0]+n[0]*r*.80,center[1]+n[1]*r*.80,center[2]+n[2]*r*.80];
+ const outer=sphereLoop(c,u,v,r*.235,24),inner=sphereLoop(c,u,v,r*.166,24);
+ const sc=proj(worldPoint(c)),front=cameraDirWorld(),wn=worldVector(n);
+ if(wn[0]*front[0]+wn[1]*front[1]+wn[2]*front[2]<-.05)return;
+ drawLocalPath(outer,'rgba(240,251,255,.94)',Math.max(1.5,ppmAt(sc[2])*r*.055),.98,true,
+   kind==='acid'?'rgba(75,115,105,.9)':(kind==='finish'?'rgba(63,126,112,.92)':'rgba(80,134,155,.88)'));
+ drawLocalPath(inner,'rgba(255,255,255,.88)',Math.max(1.2,ppmAt(sc[2])*r*.035),.98,true,
+   closed?'rgba(33,55,69,.92)':(kind==='acid'?'rgba(54,190,101,.30)':(kind==='finish'?'rgba(74,230,167,.32)':'rgba(68,199,235,.30)')));
+ if(closed){
+  const a=[c[0]-u[0]*r*.11,c[1]-u[1]*r*.11,c[2]-u[2]*r*.11],b=[c[0]+u[0]*r*.11,c[1]+u[1]*r*.11,c[2]+u[2]*r*.11];
+  const a2=[c[0]-v[0]*r*.11,c[1]-v[1]*r*.11,c[2]-v[2]*r*.11],b2=[c[0]+v[0]*r*.11,c[1]+v[1]*r*.11,c[2]+v[2]*r*.11];
+  drawLocalPath([a,b],'rgba(216,236,244,.9)',Math.max(1,ppmAt(sc[2])*r*.035),.94,false);
+  drawLocalPath([a2,b2],'rgba(216,236,244,.9)',Math.max(1,ppmAt(sc[2])*r*.035),.94,false);
+  const dot=[c[0]+n[0]*r*.015+u[0]*r*.115,c[1]+n[1]*r*.015+u[1]*r*.115,c[2]+n[2]*r*.015+u[2]*r*.115],sd=proj(worldPoint(dot));
+  ctx.fillStyle='#ff766b';ctx.beginPath();ctx.arc(sd[0],sd[1],Math.max(1.6,ppmAt(sd[2])*r*.035),0,Math.PI*2);ctx.fill();draws++;
+ }
+ if(label){ctx.save();ctx.fillStyle='rgba(238,250,255,.96)';ctx.font='700 '+Math.max(7,Math.round(ppmAt(sc[2])*r*.105))+'px Segoe UI,Arial';
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,sc[0],sc[1]);ctx.restore();}
+}
+function drawChamber(n,t,kind){
+ const cfg=CHAMBERS[kind];if(!cfg)return;
+ const dark=document.documentElement.dataset.theme==='dark';
+ const C=cfg.center,r=cfg.r,cw=worldPoint(C),s=proj(cw),ppm=ppmAt(s[2]),rp=r*ppm;
+ if(s[2]<=0)return;
+ const acid=(kind==='acid')||(n&&n.type==='acid'),finish=kind==='finish';
+ const edge=acid?'rgba(117,236,139,.88)':finish?'rgba(89,241,179,.92)':'rgba(137,226,255,.92)';
+ // soft contact shadow and transparent spherical hull
+ ctx.save();ctx.globalAlpha=.24;
+ const sh=ctx.createRadialGradient(s[0],s[1]+rp*.62,1,s[0],s[1]+rp*.62,rp*1.22);
+ sh.addColorStop(0,'rgba(4,25,38,.48)');sh.addColorStop(1,'rgba(4,25,38,0)');
+ ctx.fillStyle=sh;ctx.beginPath();ctx.ellipse(s[0],s[1]+rp*.62,rp*1.15,rp*.36,0,0,Math.PI*2);ctx.fill();ctx.restore();draws++;
+ // interior: gravity-level liquid clipped to the spherical glass
+ ctx.save();ctx.beginPath();ctx.arc(s[0],s[1],rp*.91,0,Math.PI*2);ctx.clip();
+ let volumeNode=n;
+ if(finish)volumeNode=n;
+ const fill=volumeNode?Math.max(0,Math.min(1,volumeNode.vol/volumeNode.cap)):0;
+ if(fill>.004){
+  let lineY=s[1]+rp*(.68-fill*1.43);
+  if(volumeNode&&volumeNode.vol<volumeNode.cap-1e-6){
+   const L=nodeLevel(volumeNode,volumeNode.vol),surf=proj([cw[0],L,cw[2]]);
+   if(Number.isFinite(surf[1]))lineY=surf[1];
+  } else if(volumeNode&&volumeNode.vol>=volumeNode.cap-1e-6)lineY=s[1]-rp*1.1;
+  const ac=acidPalette(volumeNode&&volumeNode.temperature,dark);
+  const col=acid?[ac.a,ac.b]:volumeNode&&volumeNode.type==='steam'?['rgba(251,252,255,.78)','rgba(184,199,216,.62)']:finish?['rgba(178,246,255,.88)','rgba(44,176,238,.84)']:['rgba(175,241,255,.90)','rgba(31,145,220,.90)'];
+  const lg=ctx.createLinearGradient(0,lineY,0,s[1]+rp);
+  lg.addColorStop(0,col[0]);lg.addColorStop(1,col[1]);ctx.fillStyle=lg;
+  if(volumeNode&&volumeNode.type==='steam')ctx.fillRect(s[0]-rp*1.2,s[1]-rp*1.2,s[0]+rp*1.2-(s[0]-rp*1.2),lineY-(s[1]-rp*1.2));
+  else ctx.fillRect(s[0]-rp*1.2,lineY,s[0]+rp*1.2-(s[0]-rp*1.2),s[1]+rp*1.2-lineY);
+  ctx.strokeStyle=acid?'rgba(232,255,204,.95)':finish?'rgba(224,255,248,.95)':'rgba(231,253,255,.95)';
+  ctx.lineWidth=Math.max(1.2,rp*.035);ctx.beginPath();ctx.moveTo(s[0]-rp*.74,lineY);ctx.quadraticCurveTo(s[0],lineY,s[0]+rp*.74,lineY);ctx.stroke();
+  /* No random/bobbing particles in liquid reservoirs: stable visual readout. */
+ }
+ // cabin rails and tiny console, visible through the low-opacity hull
+ ctx.strokeStyle=dark?'rgba(174,236,255,.36)':'rgba(68,126,153,.38)';ctx.lineWidth=Math.max(1,rp*.025);
+ ctx.beginPath();ctx.ellipse(s[0],s[1],rp*.70,rp*.32,-.05,Math.PI*1.02,Math.PI*1.98);ctx.stroke();
+ ctx.beginPath();ctx.moveTo(s[0]-rp*.60,s[1]-rp*.04);ctx.quadraticCurveTo(s[0],s[1]-rp*.22,s[0]+rp*.60,s[1]-rp*.04);ctx.stroke();
+ ctx.fillStyle=acid?'rgba(24,86,62,.76)':finish?'rgba(24,73,79,.80)':'rgba(24,66,83,.78)';
+ ctx.beginPath();ctx.moveTo(s[0]-rp*.34,s[1]+rp*.42);ctx.lineTo(s[0]-rp*.25,s[1]+rp*.25);ctx.lineTo(s[0]+rp*.25,s[1]+rp*.25);ctx.lineTo(s[0]+rp*.36,s[1]+rp*.42);ctx.closePath();ctx.fill();
+ for(let i=0;i<3;i++){ctx.fillStyle=[edge,'rgba(255,205,93,.95)','rgba(255,113,103,.95)'][i];ctx.beginPath();ctx.arc(s[0]+(i-1)*rp*.13,s[1]+rp*.31,Math.max(1.3,rp*.025),0,Math.PI*2);ctx.fill();}
+ ctx.restore();
+ // spherical shell, glass highlights and structural ribs
+ const grad=ctx.createRadialGradient(s[0]-rp*.36,s[1]-rp*.42,rp*.06,s[0],s[1],rp);
+ if(dark){grad.addColorStop(0,'rgba(220,250,255,.30)');grad.addColorStop(.66,'rgba(99,190,220,.13)');grad.addColorStop(1,'rgba(35,95,125,.23)');}
+ else{grad.addColorStop(0,'rgba(255,255,255,.48)');grad.addColorStop(.62,'rgba(174,228,245,.15)');grad.addColorStop(1,'rgba(70,143,178,.18)');}
+ ctx.fillStyle=grad;ctx.beginPath();ctx.arc(s[0],s[1],rp,0,Math.PI*2);ctx.fill();draws++;
+ ctx.strokeStyle=edge;ctx.lineWidth=Math.max(2,rp*.035);ctx.beginPath();ctx.arc(s[0],s[1],rp,0,Math.PI*2);ctx.stroke();draws++;
+ const rib1=sphereLoop(C,[1,0,0],[0,0,1],r*.83,40);
+ const rib2=sphereLoop(C,[1,0,0],[0,1,0],r*.84,40);
+ const rib3=sphereLoop(C,[0,1,0],[0,0,1],r*.84,40);
+ drawLocalPath(rib1,edge,Math.max(1,rp*.022),.54,false);
+ drawLocalPath(rib2,dark?'rgba(225,249,255,.42)':'rgba(255,255,255,.63)',Math.max(1,rp*.018),.58,false);
+ drawLocalPath(rib3,dark?'rgba(225,249,255,.30)':'rgba(57,125,154,.28)',Math.max(.8,rp*.016),.5,false);
+ // soft main airlock ring on the pipe-facing side
+ const pd=normalize3(cfg.port),portC=[C[0]+pd[0]*r,C[1]+pd[1]*r,C[2]+pd[2]*r];
+ const ref=Math.abs(pd[1])<.88?[0,1,0]:[1,0,0],pu=normalize3(cross3(pd,ref)),pv=normalize3(cross3(pd,pu));
+ const portLoop=sphereLoop(portC,pu,pv,r*.20,26);
+ drawLocalPath(portLoop,finish?'rgba(90,255,187,.98)':acid?'rgba(106,255,151,.92)':'rgba(133,233,255,.96)',Math.max(2,rp*.045),.96,false);
+ // closed side hatches. Their 3D normals rotate with the rig; only outward-facing ones are drawn.
+ const dirs=kind==='finish'?[[0,0,1],[.76,.10,.64],[-.72,-.08,.69],[.10,.74,.66],[-.18,-.70,.69]]:
+                          [[0,0,1],[.74,.08,.67],[-.74,.08,.67],[.12,.72,.68],[-.16,-.70,.70]];
+ for(let i=0;i<dirs.length;i++)drawWorldPort(C,dirs[i],r,kind,String(i+1).padStart(2,'0'),t,true);
+ // readable chamber nameplate
+ ctx.save();ctx.fillStyle=dark?'rgba(221,248,255,.94)':'rgba(31,76,94,.92)';
+ ctx.font='800 '+Math.max(8,Math.round(rp*.115))+'px Segoe UI,Arial';ctx.textAlign='center';
+ ctx.fillText(LANG==='ru'?cfg.titleRu:cfg.titleEn,s[0],s[1]-rp*1.13);ctx.restore();
+}
+/* ---------- квадратные шиберы, модуль заморозки, финиш ---------- */
+const hitZones=[];
+let gatePlacementMode=false,constructorMode=false,constructorTool='pipe',constructorPart='straight',constructorStatus='';
+function valveTangentAt(p){
+ let best=1e9,dir=[1,0,0];
+ for(const n of ND){if(n.tank)continue;
+  for(let i=1;i<n.pts.length;i++){
+   const a=n.pts[i-1],b=n.pts[i],ab=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],ll=ab[0]**2+ab[1]**2+ab[2]**2||1;
+   const u=Math.max(0,Math.min(1,((p[0]-a[0])*ab[0]+(p[1]-a[1])*ab[1]+(p[2]-a[2])*ab[2])/ll));
+   const q=[a[0]+ab[0]*u,a[1]+ab[1]*u,a[2]+ab[2]*u],d=(q[0]-p[0])**2+(q[1]-p[1])**2+(q[2]-p[2])**2;
+   if(d<best){best=d;dir=normalize3(ab);}
+  }
+ }
+ return dir;
+}
+function rrPath(x,y,w,h,r){
+ r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+}
+function gateLabel(e){
+ if(e.gateId)return (LANG==='ru'?'Ш':'G')+e.gateId;
+ return e.valve||'';
+}
+function add3(a,b){return[a[0]+b[0],a[1]+b[1],a[2]+b[2]];}
+function mul3(a,k){return[a[0]*k,a[1]*k,a[2]*k];}
+function dot3(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function gateFrame(e){
+ const A=normalize3(e.tangent||valveTangentAt(e.vpos));
+ let S=[0,1,0],d=dot3(S,A);S=normalize3([S[0]-A[0]*d,S[1]-A[1]*d,S[2]-A[2]*d]);
+ if(Math.hypot(...S)<.25){S=[1,0,0];d=dot3(S,A);S=normalize3([S[0]-A[0]*d,S[1]-A[1]*d,S[2]-A[2]*d]);}
+ const D=normalize3(cross3(A,S));return {A,S,D};
+}
+function box3Faces(c,A,S,D,ha,hs,hd){
+ const v=(x,y,z)=>add3(c,add3(mul3(A,x*ha),add3(mul3(S,y*hs),mul3(D,z*hd))));
+ return [
+  [v(-1,-1,-1),v(-1,1,-1),v(-1,1,1),v(-1,-1,1)],
+  [v(1,-1,-1),v(1,-1,1),v(1,1,1),v(1,1,-1)],
+  [v(-1,-1,-1),v(-1,-1,1),v(1,-1,1),v(1,-1,-1)],
+  [v(-1,1,-1),v(1,1,-1),v(1,1,1),v(-1,1,1)],
+  [v(-1,-1,-1),v(1,-1,-1),v(1,1,-1),v(-1,1,-1)],
+  [v(-1,-1,1),v(-1,1,1),v(1,1,1),v(1,-1,1)]
+ ];
+}
+function drawPoly3(points,fill,stroke,width){
+ const q=points.map(p=>proj(worldPoint(p)));if(q.some(v=>!Number.isFinite(v[0])||v[2]<=0))return;
+ ctx.beginPath();ctx.moveTo(q[0][0],q[0][1]);for(let i=1;i<q.length;i++)ctx.lineTo(q[i][0],q[i][1]);ctx.closePath();
+ if(fill){ctx.fillStyle=fill;ctx.fill();}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width||1;ctx.lineJoin='round';ctx.stroke();}draws++;
+}
+function drawBox3(c,A,S,D,ha,hs,hd,colors,stroke){
+ const faces=box3Faces(c,A,S,D,ha,hs,hd).map((pts,i)=>({pts,depth:pts.reduce((a,p)=>a+proj(worldPoint(p))[2],0)/4,fill:colors[i%colors.length]})).sort((a,b)=>b.depth-a.depth);
+ for(const f of faces)drawPoly3(f.pts,f.fill,stroke,Math.max(1,ppmAt(f.depth)*.004));
+}
+function drawRing3(c,A,S,D,r,stroke,width){
+ const pts=[];for(let i=0;i<=36;i++){const a=i/36*Math.PI*2;pts.push(add3(c,add3(mul3(S,Math.cos(a)*r),mul3(D,Math.sin(a)*r))));}
+ const q=pts.map(p=>proj(worldPoint(p)));if(q.some(v=>v[2]<=0))return;
+ ctx.beginPath();ctx.moveTo(q[0][0],q[0][1]);for(let i=1;i<q.length;i++)ctx.lineTo(q[i][0],q[i][1]);
+ ctx.strokeStyle=stroke;ctx.lineWidth=width||2;ctx.stroke();draws++;
+}
+function drawValve(e,t){
+ const c=e.vpos,Aframe=gateFrame(e),A=Aframe.A,Sv=Aframe.S,D=Aframe.D;
+ const center=worldPoint(c),s=proj(center),px=ppmAt(s[2]),open=!!e.open;
+ e.valveAng+=( (open?90:0)-e.valveAng )*Math.min(1,dtFrame*8);
+ const lift=Math.max(0,Math.min(1,e.valveAng/90));
+ hitZones.push({x:s[0],y:s[1],r:Math.max(27,px*.105),kind:'valve',edge:e});
+ /* A real inline 3-D housing: its ferrules, transparent body, shutter and actuator
+    all share the pipe-local frame and therefore rotate with the rig. */
+ drawBox3(c,A,Sv,D,.142,.094,.086,[
+  'rgba(194,225,235,.25)','rgba(240,252,255,.22)','rgba(120,164,180,.28)',
+  'rgba(218,241,248,.25)','rgba(92,136,154,.30)','rgba(210,237,245,.24)'
+ ],'rgba(60,103,121,.82)');
+ const aperture=add3(c,mul3(D,.018));
+ drawBox3(aperture,A,Sv,D,.090,.062,.060,[
+  'rgba(12,35,47,.40)','rgba(20,48,61,.38)','rgba(6,25,38,.40)',
+  'rgba(23,54,68,.38)','rgba(9,32,45,.40)','rgba(25,55,68,.38)'
+ ],'rgba(232,248,252,.36)');
+ const bonnet=add3(c,mul3(Sv,.142));
+ drawBox3(bonnet,A,Sv,D,.071,.102,.078,[
+  'rgba(133,170,186,.64)','rgba(239,249,252,.82)','rgba(170,204,216,.72)',
+  'rgba(211,233,240,.72)','rgba(92,139,158,.70)','rgba(202,229,237,.76)'
+ ],'rgba(69,112,130,.91)');
+ const bladeC=add3(c,mul3(Sv,.012+lift*.158));
+ drawBox3(bladeC,A,Sv,D,.014,.060,.060,[
+  'rgba(195,59,66,.96)','rgba(255,119,102,.97)','rgba(226,75,76,.96)',
+  'rgba(255,159,135,.97)','rgba(171,50,61,.96)','rgba(255,134,116,.97)'
+ ],'rgba(255,242,235,.96)');
+ const stemA=add3(c,mul3(Sv,.075)),stemB=add3(c,mul3(Sv,.203+lift*.015));
+ const qa=proj(worldPoint(stemA)),qb=proj(worldPoint(stemB));
+ ctx.lineCap='round';ctx.strokeStyle='rgba(48,73,84,.95)';ctx.lineWidth=Math.max(2,px*.011);ctx.beginPath();ctx.moveTo(qa[0],qa[1]);ctx.lineTo(qb[0],qb[1]);ctx.stroke();
+ const handleL=add3(stemB,mul3(A,-.048)),handleR=add3(stemB,mul3(A,.048));
+ const ql=proj(worldPoint(handleL)),qr=proj(worldPoint(handleR));
+ ctx.strokeStyle=open?'#24bd78':'#ff6963';ctx.lineWidth=Math.max(4,px*.023);ctx.beginPath();ctx.moveTo(ql[0],ql[1]);ctx.lineTo(qr[0],qr[1]);ctx.stroke();
+ for(const sign of[-1,1]){
+  const fc=add3(c,mul3(A,sign*.145));
+  drawRing3(fc,A,Sv,D,.074,'rgba(241,252,255,.95)',Math.max(1.6,px*.009));
+  drawRing3(add3(fc,mul3(A,-sign*.012)),A,Sv,D,.058,'rgba(82,138,157,.76)',Math.max(1,px*.006));
+ }
+ const lp=proj(worldPoint(add3(c,mul3(Sv,.265))));
+ ctx.fillStyle=document.documentElement.dataset.theme==='dark'?'rgba(240,251,255,.98)':'rgba(25,63,78,.98)';
+ ctx.font='800 '+Math.max(10,Math.round(px*.045))+'px Segoe UI,Arial';ctx.textAlign='center';ctx.textBaseline='bottom';
+ ctx.fillText(gateLabel(e),lp[0],lp[1]);draws++;
+}
+function drawDevice(e,t){
+ const c=e.vpos,fr=gateFrame(e),A=fr.A,Sv=fr.S,D=fr.D;
+ const isCool=e.deviceType==='cooler',active=!!e.active,color=isCool?'#329cff':'#ff5e4f';
+ const base=[
+  'rgba(202,231,240,.26)','rgba(246,253,255,.29)','rgba(138,182,198,.32)',
+  'rgba(211,240,247,.28)','rgba(76,130,151,.30)','rgba(218,242,248,.28)'
+ ];
+ drawBox3(c,A,Sv,D,.113,.075,.078,base,'rgba(62,111,132,.88)');
+ const ferruleL=add3(c,mul3(A,-.118)),ferruleR=add3(c,mul3(A,.118));
+ drawRing3(ferruleL,A,Sv,D,.071,'rgba(242,253,255,.95)',2.1);
+ drawRing3(ferruleR,A,Sv,D,.071,'rgba(242,253,255,.95)',2.1);
+ const buttonC=add3(c,add3(mul3(Sv,.088),mul3(D,.050))),sp=proj(worldPoint(buttonC)),px=ppmAt(sp[2]),r=Math.max(7,px*.028);
+ if(sp[2]>0){
+  ctx.save();if(active){ctx.shadowColor=color;ctx.shadowBlur=12;}
+  const g=ctx.createRadialGradient(sp[0]-r*.25,sp[1]-r*.3,r*.12,sp[0],sp[1],r);
+  g.addColorStop(0,active?(isCool?'#c5ecff':'#ffe0d1'):(isCool?'#78bfff':'#ff9d8d'));
+  g.addColorStop(1,active?color:(isCool?'#2365a6':'#a83732'));
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(sp[0],sp[1],r,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.94)';ctx.lineWidth=Math.max(1.2,px*.006);ctx.stroke();ctx.restore();draws++;
+  hitZones.push({x:sp[0],y:sp[1],r:Math.max(25,r*2.4),kind:'device',edge:e});
+  ctx.fillStyle='#fff';ctx.font='900 '+Math.max(9,Math.round(r*1.05))+'px Segoe UI,Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(isCool?'−':'+',sp[0],sp[1]);
+ }
+ const lab=proj(worldPoint(add3(c,mul3(Sv,-.145))));
+ ctx.fillStyle=document.documentElement.dataset.theme==='dark'?'rgba(240,251,255,.96)':'rgba(28,64,80,.96)';
+ ctx.font='800 '+Math.max(8,Math.round(px*.033))+'px Segoe UI,Arial';ctx.textAlign='center';ctx.textBaseline='bottom';
+ ctx.fillText(isCool?(LANG==='ru'?'ОХЛАЖДЕНИЕ':'COOLER'):(LANG==='ru'?'НАГРЕВ':'HEATER'),lab[0],lab[1]);
+ const na=ND[nodeById(e.a)],nb=ND[nodeById(e.b)],temps=[na,nb].filter(n=>n&&n.vol>1e-7&&n.type!=='empty').map(n=>n.temperature==null?20:n.temperature);
+ const tempLabel=temps.length?Math.round(temps.reduce((a,b)=>a+b,0)/temps.length)+'°C':'—°C';
+ ctx.font='700 '+Math.max(8,Math.round(px*.027))+'px Segoe UI,Arial';ctx.textBaseline='top';
+ ctx.fillText(tempLabel,lab[0],lab[1]+2);draws++;
+}
+function drawFreeze(n,t){
+ const a=worldPoint(n.pts[0]),b=worldPoint(n.pts[1]);
+ const m=[(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2];
+ const s=proj(m),px=ppmAt(s[2]);
+ const active=n.type==='ice';
+ hitZones.push({x:s[0],y:s[1],r:Math.max(26,px*0.2),kind:'freeze',node:n});
+ ctx.save();
+ if(active){ctx.shadowColor='rgba(90,200,255,.9)';ctx.shadowBlur=18;}
+ ctx.strokeStyle=active?'rgba(120,220,255,.95)':'rgba(90,160,200,.7)';
+ ctx.lineWidth=Math.max(3,px*0.03);
+ for(let i=0;i<3;i++){const q=proj(worldPoint(runPoint(n,n.L*(0.2+i*0.3))));
+  ctx.beginPath();ctx.ellipse(q[0],q[1],px*0.062,px*0.075,0,0,7);ctx.stroke();}
+ draws++;
+ /* A phase icon is shown only for water/ice; acid never receives an ice or steam badge. */
+ if(n.type!=='acid'&&n.type!=='steam'){
+  ctx.fillStyle=active?'#bfeaff':'rgba(120,180,215,.9)';
+  ctx.font='700 '+Math.round(px*0.07)+'px Segoe UI';ctx.textAlign='center';ctx.fillText('❄',s[0],s[1]-px*0.09);
+ }
+ ctx.restore();
+ if(active){ /* таймер-кольцо */
+  ctx.strokeStyle='rgba(120,220,255,.9)';ctx.lineWidth=3;
+  ctx.beginPath();ctx.arc(s[0],s[1],px*0.11,-Math.PI/2,-Math.PI/2+Math.PI*2*(n.iceT/FREEZE_TIME));ctx.stroke();draws++;}
+}
+function drawFinish(n,t){
+ const tp=worldPoint(n.pts[n.pts.length-1]);
+ const s=proj(tp),px=ppmAt(s[2]);
+ const pulse=.6+.4*Math.sin(t*3);
+ ctx.save();ctx.shadowColor='rgba(61,220,132,.8)';ctx.shadowBlur=14*pulse;
+ ctx.strokeStyle='rgba(61,220,132,'+(0.55+0.35*pulse)+')';ctx.lineWidth=Math.max(3,px*0.03);
+ ctx.beginPath();ctx.ellipse(s[0],s[1],px*0.09,px*0.045,0,0,7);ctx.stroke();draws++;
+ ctx.restore();
+ ctx.fillStyle='rgba(61,220,132,.9)';
+ const ay=s[1]-px*0.10-((t*30)%20);
+ ctx.beginPath();ctx.moveTo(s[0],ay-8);ctx.lineTo(s[0]-6,ay);ctx.lineTo(s[0]+6,ay);ctx.closePath();ctx.fill();
+ ctx.font='700 '+Math.max(10,Math.round(px*0.05))+'px Segoe UI';ctx.textAlign='center';
+ ctx.fillText(LANG==='ru'?'ВЫХОД':'EXIT',s[0],s[1]-px*0.16);
+}
+/* ---------- Ума ---------- */
+function drawUma(t){
+ const s=proj(ball.px),px=ppmAt(s[2]);
+ const r=px*0.052;
+ const inLiq=ballInLiquid();
+ const hurt=ball.hurt;
+ ctx.save();
+ /* свечение */
+ const g=ctx.createRadialGradient(s[0],s[1],r*.3,s[0],s[1],r*2.2);
+ g.addColorStop(0,hurt?'rgba(255,90,90,.35)':'rgba(80,230,220,.35)');g.addColorStop(1,'rgba(0,0,0,0)');
+ ctx.fillStyle=g;ctx.beginPath();ctx.arc(s[0],s[1],r*2.2,0,7);ctx.fill();draws++;
+ /* тело-капсула */
+ const bg=ctx.createRadialGradient(s[0]-r*.35,s[1]-r*.4,r*.1,s[0],s[1],r);
+ if(hurt){bg.addColorStop(0,'rgba(255,160,160,.95)');bg.addColorStop(1,'rgba(230,60,60,.85)');}
+ else{bg.addColorStop(0,'rgba(190,255,250,.95)');bg.addColorStop(1,'rgba(40,190,200,.80)');}
+ ctx.fillStyle=bg;ctx.beginPath();ctx.arc(s[0],s[1],r,0,7);ctx.fill();
+ ctx.strokeStyle=hurt?'rgba(255,220,220,.9)':'rgba(220,255,255,.9)';ctx.lineWidth=Math.max(1.5,r*.12);ctx.stroke();draws++;
+ /* плавники */
+ ctx.fillStyle=hurt?'rgba(255,120,120,.8)':'rgba(60,210,215,.8)';
+ const fw=Math.sin(t*6)*0.25;
+ ctx.beginPath();ctx.ellipse(s[0]-r*1.05,s[1]+r*.1,r*.35,r*.18,fw,0,7);ctx.fill();
+ ctx.beginPath();ctx.ellipse(s[0]+r*1.05,s[1]+r*.1,r*.35,r*.18,-fw,0,7);ctx.fill();draws++;
+ /* глаза */
+ const blink=ball.blink>3.2?0.15:1;
+ const lx=s[0]-r*.34+ball.face*r*.12, rx=s[0]+r*.34+ball.face*r*.12, ey=s[1]-r*.15;
+ ctx.fillStyle='#fff';
+ ctx.beginPath();ctx.ellipse(lx,ey,r*.26,r*.30*blink,0,0,7);ctx.fill();
+ ctx.beginPath();ctx.ellipse(rx,ey,r*.26,r*.30*blink,0,0,7);ctx.fill();
+ if(blink>0.5){
+  ctx.fillStyle= hurt?'#7a1010':'#123c4a';
+  const pr=r*.13;
+  ctx.beginPath();ctx.arc(lx+ball.face*r*.08,ey+r*.05,pr,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc(rx+ball.face*r*.08,ey+r*.05,pr,0,7);ctx.fill();
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(lx+ball.face*r*.08-pr*.3,ey+r*.02,pr*.35,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc(rx+ball.face*r*.08-pr*.3,ey+r*.02,pr*.35,0,7);ctx.fill();
+ }
+ /* рот */
+ ctx.strokeStyle=hurt?'#7a1010':'#0d3540';ctx.lineWidth=Math.max(1.2,r*.09);ctx.lineCap='round';
+ ctx.beginPath();
+ if(hurt){ctx.arc(s[0],s[1]+r*.55,r*.22,Math.PI*1.15,Math.PI*1.85);}
+ else if(gameState==='win'){ctx.arc(s[0],s[1]+r*.25,r*.30,Math.PI*0.15,Math.PI*0.85);}
+ else{ctx.arc(s[0],s[1]+r*.30,r*.16,Math.PI*0.2,Math.PI*0.8);}
+ ctx.stroke();draws++;
+ /* пузырьки */
+ if(inLiq){for(let i=0;i<3;i++){const ph2=(t*0.7+i*0.37)%1;
+  ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.arc(s[0]+Math.sin(i*9+t)*r*.6,s[1]-r-ph2*r*2.4,r*.12+ph2*r*.1,0,7);ctx.stroke();}}
+ ctx.restore();
+}
+function drawUmaBig(cnv,happy){
+ const g=cnv.getContext('2d'),w=cnv.width,h=cnv.height;
+ g.clearRect(0,0,w,h);
+ const cx=w/2,cy=h/2+6,r=w*0.30;
+ const gl=g.createRadialGradient(cx,cy,r*.3,cx,cy,r*1.6);
+ gl.addColorStop(0,happy?'rgba(80,230,220,.4)':'rgba(255,90,90,.4)');gl.addColorStop(1,'rgba(0,0,0,0)');
+ g.fillStyle=gl;g.beginPath();g.arc(cx,cy,r*1.6,0,7);g.fill();
+ const bg=g.createRadialGradient(cx-r*.35,cy-r*.4,r*.1,cx,cy,r);
+ if(happy){bg.addColorStop(0,'rgba(190,255,250,.98)');bg.addColorStop(1,'rgba(40,190,200,.85)');}
+ else{bg.addColorStop(0,'rgba(255,170,170,.98)');bg.addColorStop(1,'rgba(220,60,60,.85)');}
+ g.fillStyle=bg;g.beginPath();g.arc(cx,cy,r,0,7);g.fill();
+ g.strokeStyle='#fff';g.lineWidth=3;g.stroke();
+ g.fillStyle=happy?'rgba(60,210,215,.85)':'rgba(255,120,120,.85)';
+ g.beginPath();g.ellipse(cx-r*1.05,cy+r*.1,r*.35,r*.18,.3,0,7);g.fill();
+ g.beginPath();g.ellipse(cx+r*1.05,cy+r*.1,r*.35,r*.18,-.3,0,7);g.fill();
+ const ey=cy-r*.18;
+ g.fillStyle='#fff';
+ g.beginPath();g.ellipse(cx-r*.36,ey,r*.28,r*.33,0,0,7);g.fill();
+ g.beginPath();g.ellipse(cx+r*.36,ey,r*.28,r*.33,0,0,7);g.fill();
+ if(happy){
+  g.fillStyle='#123c4a';
+  g.beginPath();g.arc(cx-r*.36,ey+r*.05,r*.14,0,7);g.fill();
+  g.beginPath();g.arc(cx+r*.36,ey+r*.05,r*.14,0,7);g.fill();
+  g.fillStyle='#fff';
+  g.beginPath();g.arc(cx-r*.40,ey,r*.05,0,7);g.fill();
+  g.beginPath();g.arc(cx+r*.32,ey,r*.05,0,7);g.fill();
+  g.strokeStyle='#0d3540';g.lineWidth=4;g.lineCap='round';
+  g.beginPath();g.arc(cx,cy+r*.25,r*.32,Math.PI*0.15,Math.PI*0.85);g.stroke();
+  /* искры радости */
+  g.fillStyle='rgba(255,220,120,.9)';
+  for(let i=0;i<6;i++){const a=i/6*6.283;
+   g.beginPath();g.arc(cx+Math.cos(a)*r*1.35,cy+Math.sin(a)*r*1.35,3,0,7);g.fill();}
+ }else{
+  g.strokeStyle='#7a1010';g.lineWidth=4;g.lineCap='round';
+  for(const sx of[-1,1]){g.beginPath();
+   g.moveTo(cx+sx*r*.36-r*.12,ey-r*.12);g.lineTo(cx+sx*r*.36+r*.12,ey+r*.12);
+   g.moveTo(cx+sx*r*.36+r*.12,ey-r*.12);g.lineTo(cx+sx*r*.36-r*.12,ey+r*.12);g.stroke();}
+  g.beginPath();g.arc(cx,cy+r*.55,r*.22,Math.PI*1.15,Math.PI*1.85);g.stroke();
+ }
+}
+/* ---------- главный кадр ---------- */
+function render(t){
+ draws=0;
+ ctx.setTransform(DPR,0,0,DPR,0,0);
+ ctx.clearRect(0,0,W,H);
+ MVP=mvp();
+ drawBG(t);
+ drawTable();
+ /* сферические камеры — сначала, трубы/жидкость поверх стекла */
+ for(const n of ND)if(n.tank)drawChamber(n,t,n.tank==='acid'?'acid':'start');
+ const finishNode=ND.find(n=>n.finish);if(finishNode)drawChamber(finishNode,t,'finish');
+ /* сортировка узлов по глубине (painter) */
+ const order=ND.map((n,i)=>{const c=n.pts.map(p=>proj(worldPoint(p)));
+  return {i,d:c.reduce((a,p)=>a+p[2],0)/c.length};}).sort((a,b)=>b.d-a.d);
+ for(const o of order){const n=ND[o.i];if(!n.tank)drawNode(n,t,'glass');}
+ for(const o of order){const n=ND[o.i];if(!n.tank)drawNode(n,t,'liquid');}
+ for(const e of ED)if(e.valve)drawValve(e,t);
+ for(const e of ED)if(e.deviceType)drawDevice(e,t);
+ for(const n of ND)if(n.freeze)drawFreeze(n,t);
+ for(const n of ND)if(n.finish)drawFinish(n,t);
+ drawUma(t);
+ /* виньетка */
+ const dark=document.documentElement.dataset.theme==='dark';
+ const vg=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*.42,W/2,H/2,Math.max(W,H)*.75);
+ vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,dark?'rgba(0,0,10,.42)':'rgba(30,60,80,.16)');
+ ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);draws++;
+}
+
+/* ================= ввод: arcball как внешний вид сферы Мат-Бум 3 ======= */
+const pointers=new Map();
+let drag=null,pinch=null,lastTap=0;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function arcVec(x,y){
+ const r=cv.getBoundingClientRect(),scale=Math.min(r.width,r.height)/2||1;
+ let nx=(x-r.left-r.width/2)/scale,ny=-(y-r.top-r.height/2)/scale,l=Math.hypot(nx,ny);
+ if(l>1){nx/=l;ny/=l;return[nx,ny,0];}
+ return[nx,ny,Math.sqrt(1-l*l)];
+}
+function applyArcball(v0,v1,dt){
+ const q=qBetween(v0,v1),dot=Math.max(-1,Math.min(1,Math.abs(q[3]))),ang=2*Math.acos(dot);
+ if(ang<1e-5)return;
+ rot.q=qNormalize(qMultiply(q,rot.q));
+ const ax=[v0[1]*v1[2]-v0[2]*v1[1],v0[2]*v1[0]-v0[0]*v1[2],v0[0]*v1[1]-v0[1]*v1[0]],al=Math.hypot(...ax);
+ if(al>1e-7){rot.axis=ax.map(v=>v/al);rot.speed=Math.min(ROT_MAX_SPEED,ang/Math.max(.008,dt)*.85);}
+}
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('pointerdown',e=>{
+ cv.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(pointers.size===1){rot.speed=0;drag={x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY,v:arcVec(e.clientX,e.clientY),moved:false,t:performance.now(),avgDt:16};cv.classList.add('grabbing');}
+ else if(pointers.size===2){drag=null;const p=[...pointers.values()];pinch={d:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),cx:(p[0].x+p[1].x)/2,cy:(p[0].y+p[1].y)/2,t:performance.now()};}
+});
+cv.addEventListener('pointermove',e=>{
+ const old=pointers.get(e.pointerId);if(!old)return;
+ const dx=e.clientX-old.x,dy=e.clientY-old.y;old.x=e.clientX;old.y=e.clientY;
+ if(pinch&&pointers.size>=2){
+  const p=[...pointers.values()],d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),cx=(p[0].x+p[1].x)/2,cy=(p[0].y+p[1].y)/2;
+  setZoom(cam.dist*(pinch.d/Math.max(40,d)));
+  if(Math.hypot(cx-pinch.cx,cy-pinch.cy)>2){const dt=(performance.now()-pinch.t)/1000;applyArcball(arcVec(pinch.cx,pinch.cy),arcVec(cx,cy),dt);}
+  pinch={d,cx,cy,t:performance.now()};return;
+ }
+ if(drag){
+  const now=performance.now(),dt=Math.max(.008,(now-drag.t)/1000),v=arcVec(e.clientX,e.clientY);
+  if(Math.hypot(e.clientX-drag.x0,e.clientY-drag.y0)>8)drag.moved=true;
+  if(drag.moved)applyArcball(drag.v,v,dt);
+  drag.avgDt=drag.avgDt*.7+(now-drag.t)*.3;drag.t=now;drag.v=v;drag.x=e.clientX;drag.y=e.clientY;
+ }
+});
+function endPointer(e){
+ const was=drag;pointers.delete(e.pointerId);
+ if(pointers.size<2)pinch=null;
+ if(pointers.size===0){
+  if(e.type==='pointerup'&&was&&!was.moved)tapAt(e.clientX,e.clientY);
+  if(was&&was.moved){const quiet=performance.now()-was.t;if(quiet>Math.max(120,was.avgDt*2.5))rot.speed=0;}
+  drag=null;cv.classList.remove('grabbing');
+ }else if(pointers.size===1){const p=[...pointers.values()][0];drag={x:p.x,y:p.y,x0:p.x,y0:p.y,v:arcVec(p.x,p.y),moved:true,t:performance.now(),avgDt:16};}
+}
+cv.addEventListener('pointerup',endPointer);cv.addEventListener('pointercancel',endPointer);
+cv.addEventListener('wheel',e=>{e.preventDefault();setZoom(cam.dist+e.deltaY*.0017);},{passive:false});
+function nearestPipePlacement(x,y){
+ let best=null;
+ for(const base of runtimeBaseNodes()){
+  if(base.tank||base.freeze)continue;
+  const m=pathMetrics(base.pts);if(m.L<GATE_END_MARGIN*2+0.025)continue;
+  for(let i=1;i<base.pts.length;i++){
+   const segLen=m.len[i-1];if(segLen<1e-8)continue;
+   const s0=m.cum[i-1],s1=m.cum[i];
+   const minS=Math.max(GATE_END_MARGIN,s0),maxS=Math.min(m.L-GATE_END_MARGIN,s1);
+   if(maxS-minS<0.025)continue;
+   const a=base.pts[i-1],b=base.pts[i],tlo=(minS-s0)/segLen,thi=(maxS-s0)/segLen;
+   const screenAt=u=>{
+    const p=[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u,a[2]+(b[2]-a[2])*u];
+    const q=proj(worldPoint(p));return {p,q,d2:(q[0]-x)**2+(q[1]-y)**2};
+   };
+   let lo=tlo,hi=thi;
+   for(let k=0;k<17;k++){
+    const t1=lo+(hi-lo)/3,t2=hi-(hi-lo)/3;
+    if(screenAt(t1).d2<screenAt(t2).d2)hi=t2;else lo=t1;
+   }
+   const choices=[tlo,thi,(lo+hi)/2];let bestSeg=null;
+   for(const u of choices){const q=screenAt(u);if(q.q[2]<=0.1)continue;
+    if(!bestSeg||q.d2<bestSeg.d2)bestSeg={...q,u};}
+   if(!bestSeg)continue;
+   const globalS=s0+bestSeg.u*segLen,ppm=ppmAt(bestSeg.q[2]);
+   const radius=Math.max(21,ppm*PIPE_R*2*.94);
+   if(bestSeg.d2>radius*radius)continue;
+   const candidate={nodeId:base.id,s:globalS,p:bestSeg.p,tangent:pathTangentAt(base.pts,m.cum,globalS),
+    x:bestSeg.q[0],y:bestSeg.q[1],depth:bestSeg.q[2],distance:Math.sqrt(bestSeg.d2)};
+   if(!best||candidate.distance<best.distance-0.25||
+     (Math.abs(candidate.distance-best.distance)<=0.25&&candidate.depth<best.depth))best=candidate;
+  }
+ }
+ return best;
+}
+function gateSpotOccupied(p){
+ const pos=[...INLINE_GATES,...placedGates,...placedDevices,...customParts.map(x=>x.attach)].map(g=>g.vpos).filter(Boolean);
+ for(const e of ED)if((e.valve||e.deviceType)&&e.vpos)pos.push(e.vpos);
+ return pos.some(q=>Math.hypot(p[0]-q[0],p[1]-q[1],p[2]-q[2])<GATE_MIN_SPACING);
+}
+function installDeviceAtScreen(x,y,kind){
+ if(placedDevices.length>=MAX_DEVICES){setConstructorStatus(LANG==='ru'?'Достигнут лимит устройств.':'Device limit reached.');return false;}
+ const pick=nearestPipePlacement(x,y);if(!pick){setConstructorStatus(T('ctor_tap_pipe'));return false;}
+ if(gateSpotOccupied(pick.p)){setConstructorStatus(T('ctor_occupied'));return false;}
+ const seq=nextDevice++,device={deviceId:'D'+seq,deviceType:kind,nodeId:pick.nodeId,s:pick.s,
+  vpos:pick.p.slice(),tangent:pick.tangent.slice(),active:false};
+ placedDevices.push(device);buildLevel(true);S.valve();
+ setConstructorStatus((LANG==='ru'?'Установлен ':'Installed ')+(kind==='cooler'?(LANG==='ru'?'охладитель':'cooler'):(LANG==='ru'?'нагреватель':'heater'))+'. '+T('ctor_activate'));
+ return true;
+}
+function addPipePartAtScreen(x,y){
+ if(customParts.length>=MAX_CUSTOM_PARTS){setConstructorStatus(LANG==='ru'?'Достигнут лимит элементов трубы.':'Pipe element limit reached.');return false;}
+ const pick=nearestPipePlacement(x,y);if(!pick){setConstructorStatus(T('ctor_tap_pipe'));return false;}
+ if(gateSpotOccupied(pick.p)){setConstructorStatus(T('ctor_occupied'));return false;}
+ const t=normalize3(pick.tangent),side=normalize3([-t[1],t[0],0]),P=pick.p.slice();
+ const add=(a,b,k)=>[a[0]+b[0]*k,a[1]+b[1]*k,a[2]+b[2]*k];
+ let pts,label=constructorPart;
+ if(constructorPart==='elbow')pts=[P,add(P,side,.22),add(add(P,side,.22),t,.26)];
+ else if(constructorPart==='tee')pts=[P,add(P,side,.39)];
+ else if(constructorPart==='loop')pts=[P,add(P,side,.18),add(P,side,.38),add(add(P,side,.38),t,.24),add(add(P,side,.18),t,.24)];
+ else pts=[P,add(P,side,.42)];
+ const m=pathMetrics(pts),id='X'+nextPart++;
+ const node={id,cap:Math.max(.022,m.L*.14),pts,moduleKind:constructorPart,custom:true};
+ customParts.push({id,node,attach:{nodeId:pick.nodeId,s:pick.s,vpos:P.slice(),tangent:t.slice()}});
+ buildLevel(true);
+ setConstructorStatus(T('ctor_part_added',{part:constructorPartLabel(label)}));S.click();return true;
+}
+function constructorPartLabel(kind){
+ const ru={straight:'прямая',elbow:'угол 90°',tee:'тройник',loop:'U-образный модуль'};
+ const en={straight:'straight',elbow:'90° elbow',tee:'tee branch',loop:'U-shaped module'};
+ return (LANG==='ru'?ru:en)[kind]||kind;
+}
+function setConstructorStatus(text){constructorStatus=text||'';paintConstructorUI();}
+function applyElementFill(x,y,type){
+ const pick=nearestPipePlacement(x,y);if(!pick){setConstructorStatus(T('ctor_tap_pipe'));return false;}
+ const base=runtimeBaseNodes().find(n=>n.id===pick.nodeId);if(!base){setConstructorStatus(T('ctor_tap_pipe'));return false;}
+ const fraction=type==='empty'?0:1,temp=defaultTemp(type);
+ fillOverrides[base.id]={type,fraction,temperature:temp};
+ for(const n of ND.filter(n=>n.sourceId===base.id)){
+  n.type=type;n.vol=type==='empty'?0:n.cap*fraction;n.temperature=temp;n.iceT=0;
+ }
+ setConstructorStatus(T('ctor_filled',{type:type==='water'?(LANG==='ru'?'водой':'with water'):type==='acid'?(LANG==='ru'?'кислотой':'with acid'):(LANG==='ru'?'опустошён':'emptied')}));
+ S.sel();return true;
+}
+function constructorTap(x,y){
+ if(constructorTool==='pipe'){addPipePartAtScreen(x,y);return;}
+ if(constructorTool==='water'||constructorTool==='acid'||constructorTool==='empty'){applyElementFill(x,y,constructorTool);return;}
+ if(constructorTool==='gate'){const before=placedGates.length;if(installGateAtScreen(x,y)&&placedGates.length>before)setConstructorStatus(T('ctor_gate_added'));return;}
+ if(constructorTool==='cooler'||constructorTool==='heater'){installDeviceAtScreen(x,y,constructorTool);return;}
+}
+function gateDisplayLabel(g){return g.gateId?(LANG==='ru'?'Ш':'G')+g.gateId:(g.valve||'');}
+function placementHint(text){if(constructorMode)setConstructorStatus(text);else flashHint(text);}
+function installGateAtScreen(x,y){
+ if(placedGates.length>=MAX_PLACED_GATES){placementHint(T('gate_limit'));return false;}
+ const pick=nearestPipePlacement(x,y);
+ if(!pick){placementHint(T('gate_no_pipe'));return false;}
+ if(gateSpotOccupied(pick.p)){placementHint(T('gate_occupied'));return false;}
+ const seq=nextPlacedGate++,gate={valve:'P'+seq,gateId:seq,nodeId:pick.nodeId,s:pick.s,
+  vpos:pick.p.slice(),tangent:pick.tangent.slice()};
+ placedGates.push(gate);
+ buildLevel(true);
+ gatePlacementMode=false;paintGateButton();S.valve();
+ flashHint(T('gate_placed',{label:gateDisplayLabel(gate)}));
+ return true;
+}
+function paintGateButton(){
+ const b=document.getElementById('bGate');if(!b)return;
+ b.classList.toggle('placing',gatePlacementMode);
+ b.setAttribute('aria-pressed',gatePlacementMode?'true':'false');
+ const title=T(gatePlacementMode?'gate_cancel':'gate_btn');b.title=title;b.setAttribute('aria-label',title);
+}
+function toggleGatePlacement(){
+ if(!gameScreen()||paused)return;
+ gatePlacementMode=!gatePlacementMode;paintGateButton();S.click();
+ flashHint(T(gatePlacementMode?'gate_place_hint':'gate_place_cancel'));
+}
+function tapAt(x,y){
+ if(constructorMode){constructorTap(x,y);return;}
+ if(gatePlacementMode){installGateAtScreen(x,y);return;}
+ let best=null,bd=1e9;
+ for(const z of hitZones){const d=Math.hypot(z.x-x,z.y-y);if(d<z.r&&d<bd){bd=d;best=z;}}
+ if(!best){const s=proj(ball.px),px=ppmAt(s[2]);if(Math.hypot(s[0]-x,s[1]-y)<px*.09){S.bubble();ball.blink=3.25;}return;}
+ if(best.kind==='valve')toggleValve(best.edge);else if(best.kind==='freeze')activateFreeze();else if(best.kind==='device')toggleDevice(best.edge);
+}
+function rotateRig(axis,angle){rot.q=qNormalize(qMultiply(qAxisAngle(axis,angle),rot.q));rot.speed=0;}
+function zoomStep(direction){setZoom(cam.dist*(direction<0?1.14:.88));}
+/* клавиатура */
+addEventListener('keydown',e=>{
+ if(e.metaKey||e.ctrlKey||e.altKey)return;
+ const k=e.code,step=15*Math.PI/180;
+ if(k==='Escape'){if(gameScreen())togglePause();else if(curScreen==='help')showScreen(prevScreen);return;}
+ if(k==='KeyM'){setSound(!sndOn);paintStatic();return;}
+ if(k==='KeyT'){applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');return;}
+ if(k==='KeyL'){setLang(lang()==='ru'?'en':'ru');paintStatic();return;}
+ if(k==='KeyH'){if(curScreen==='help')showScreen(prevScreen);else{prevScreen=curScreen;showScreen('help');}return;}
+ if(k==='Backquote'){statOn=!statOn;paintStats();return;}
+ if(!gameScreen()){
+  if(k==='Enter'||k==='Space'){e.preventDefault();showScreen('game');restart();}return;}
+ if(paused){if(k==='Enter'||k==='Space'){e.preventDefault();togglePause(false);}return;}
+ if(k==='ArrowLeft'||k==='KeyA'){rotateRig([0,1,0],step);e.preventDefault();}
+ else if(k==='ArrowRight'||k==='KeyD'){rotateRig([0,1,0],-step);e.preventDefault();}
+ else if(k==='ArrowUp'||k==='KeyW'){rotateRig([1,0,0],-step);e.preventDefault();}
+ else if(k==='ArrowDown'||k==='KeyS'){rotateRig([1,0,0],step);e.preventDefault();}
+ else if(k==='KeyQ'){rotateRig([0,0,1],-step);}
+ else if(k==='KeyE'){rotateRig([0,0,1],step);}
+ else if(k==='Equal'||k==='NumpadAdd'){zoomStep(1);}
+ else if(k==='Minus'||k==='NumpadSubtract'){zoomStep(-1);}
+ else if((k==='Space'||k==='KeyF')&&!constructorMode){activateFreeze();e.preventDefault();}
+ else if(k==='KeyR'){restart();}
+ else if(k==='Digit1'&&!constructorMode){const va=ED.find(x=>x.valve==='A');if(va)toggleValve(va);}
+ else if(k==='Digit2'&&!constructorMode){const vc=ED.find(x=>x.valve==='C');if(vc)toggleValve(vc);}
+});
+/* ================= механики: кран, заморозка ========================= */
+function toggleValve(e){e.open=!e.open;S.valve();}
+function toggleDevice(e){
+ if(!e||!e.deviceType)return;e.active=!e.active;
+ S[e.deviceType==='cooler'?'cooler':'heater']();
+ flashHint(e.active?(e.deviceType==='cooler'?(LANG==='ru'?'ОХЛАЖДЕНИЕ ВКЛЮЧЕНО':'COOLING ON'):(LANG==='ru'?'НАГРЕВ ВКЛЮЧЁН':'HEATING ON')):
+  (LANG==='ru'?'ТЕМПЕРАТУРА ЗАФИКСИРОВАНА':'TEMPERATURE HOLD'));
+}
+function activateFreeze(){
+ const n=ND.find(n=>n.freeze);if(!n)return;
+ if(n.type==='ice'){S.click();return;}
+ if(n.vol>1e-6&&n.type==='water'){
+  /* если Ума в зоне модуля — мягко выталкиваем её в притоковую трубу */
+  if(ball.node===ND.indexOf(n)){
+   const up=upstreamSide(ND.indexOf(n));
+   if(up!=null&&up>=0&&ND[up].type!=='ice'){transferBall(up);S.bubble();}
+  }
+  n.type='ice';n.temperature=0;n.iceT=FREEZE_TIME;freezeOn=true;S.freeze();shake(false);
+ }else{tone(220,.2,'sawtooth',.1);flashHint(LANG==='ru'?'В модуле нет воды':'No water in the module');}
+}
+function shake(big){const s=document.getElementById('shaker');
+ s.classList.remove('shakeS');void s.offsetWidth;s.classList.add('shakeS');}
+/* ================= подсказки (ТЗ §9) ================================= */
+let hintKey='',hintT=0,flashMsg='',flashT=0;
+function flashHint(m){flashMsg=m;flashT=2.2;hintKey='';}
+function updateHint(dt){
+ const el=document.getElementById('hint1');
+ if(constructorMode){el.textContent=constructorStatus||T('ctor_hint');el.classList.remove('terr');return;}
+ if(flashT>0){flashT-=dt;el.textContent=flashMsg;el.classList.remove('terr');return;}
+ if(gatePlacementMode){hintKey='gate_place_hint';el.textContent=T(hintKey);el.classList.remove('terr');return;}
+ let k='';
+ if(acidAlarm)k='hint_acidwarn';
+ else{
+  const va=ED.find(e=>e.valve==='A'),U=ND.find(n=>n.freeze);
+  const b1vol=ND.filter(n=>n.sourceId==='B1').reduce((a,n)=>a+n.vol,0);
+  const bn=ND[ball.node],ballSource=bn?bn.sourceId:'';
+  if(!va||!va.open)k='hint_open';
+  else if(b1vol<0.01&&U&&U.vol<0.01)k='hint_flow';
+  else if(!freezeOn&&U&&U.vol>0.008)k='hint_freeze';
+  else if(freezeOn&&ballSource!=='C1'&&ballSource!=='F')k='hint_rise';
+  else if(ballSource==='C1'||ballSource==='F'||(bn&&bn.finish))k='hint_almost';
+  else k='hint_flow';
+ }
+ if(k!==hintKey){hintKey=k;el.textContent=T(k);el.classList.toggle('terr',k==='hint_acidwarn');}
+}
+/* ================= экраны / оверлеи / UI ============================= */
+let paused=false,curScreen='start',prevScreen='start',levelStart=0,pauseAt=0,bestTime=Plat.load('best',0),wins=Plat.load('wins',0);
+function paintConstructorUI(){
+ const panel=document.getElementById('constructorPanel');if(!panel)return;
+ document.getElementById('ctor-title').textContent=T('ctor_title');
+ document.getElementById('ctor-hint').textContent=constructorStatus||T('ctor_hint');
+ panel.querySelectorAll('[data-ctor-tool]').forEach(b=>{
+  b.textContent=T('ctor_'+b.dataset.ctorTool);b.classList.toggle('selected',b.dataset.ctorTool===constructorTool);
+ });
+ panel.querySelectorAll('[data-part]').forEach(b=>{
+  b.textContent=T('ctor_'+b.dataset.part);b.classList.toggle('selected',b.dataset.part===constructorPart);
+ });
+ document.getElementById('ctor-modules').hidden=constructorTool!=='pipe';
+ document.getElementById('ctor-test').textContent=T('ctor_test');
+ document.getElementById('ctor-clear').textContent=T('ctor_clear');
+ document.getElementById('ctor-back').title=T('back');
+}
+function startConstructor(){
+ constructorMode=true;constructorTool='pipe';constructorStatus='';paused=false;
+ showScreen('constructor');restart();paintConstructorUI();
+}
+function clearConstructorAdditions(){
+ customParts=[];placedDevices=[];placedGates=[];fillOverrides=Object.create(null);
+ nextPart=1;nextDevice=1;nextPlacedGate=1;buildLevel(false);
+ setConstructorStatus(LANG==='ru'?'Добавленные трубы, устройства и заполнение очищены.':'Custom pipes, devices, and fills cleared.');S.click();
+}
+function gameScreen(){return curScreen==='game'||curScreen==='constructor';}
+function showScreen(s){
+ curScreen=s;
+ const isGame=s==='game'||s==='constructor';
+ if(!isGame&&gatePlacementMode){gatePlacementMode=false;paintGateButton();}
+ document.getElementById('scr-start').classList.toggle('on',s==='start');
+ document.getElementById('scr-help').classList.toggle('on',s==='help');
+ document.getElementById('scr-mods').classList.toggle('on',s==='mods');
+ const game=document.getElementById('scr-game');game.classList.toggle('on',isGame);
+ game.classList.toggle('constructor-mode',s==='constructor'&&constructorMode);
+ document.getElementById('constructorPanel').hidden=!(s==='constructor'&&constructorMode);
+ if(s==='mods')renderMods();
+ document.getElementById('btn-back').hidden=(s==='start');
+ if(isGame){resize();requestAnimationFrame(()=>resize());}
+ paintConstructorUI();
+}
+function togglePause(force){
+ if(!gameScreen()||constructorMode)return;
+ const want=force===undefined?!paused:force;
+ if(want===paused)return;
+ paused=want;
+ if(paused&&gatePlacementMode){gatePlacementMode=false;paintGateButton();}
+ document.getElementById('ov-pause').classList.toggle('on',paused);
+ if(paused){Plat.gameplayStop();pauseAt=performance.now();if(AC)AC.suspend();}
+ else{if(AC)AC.resume();Plat.gameplayStart();
+  if(pauseAt)levelStart+=performance.now()-pauseAt;pauseAt=0;}
+}
+let pausedAcc=0;
+function restart(){
+ gatePlacementMode=false;paintGateButton();
+ rot.q=[0,0,0,1];rot.axis=[0,1,0];rot.speed=0;labYaw=0;
+ cam.az=-0.32;cam.el=0.14;fitCamera(true);
+ buildLevel();
+ hintKey='';flashT=0;paused=false;
+ document.getElementById('ov-pause').classList.remove('on');
+ document.getElementById('ov-win').classList.remove('on');
+ document.getElementById('ov-lose').classList.remove('on');
+ levelStart=performance.now();pausedAcc=0;
+ if(AC&&!constructorMode)AC.resume();
+ if(!constructorMode)Plat.gameplayStart();
+ if(!constructorMode)S.sel();
+}
+function onWin(){
+ Plat.gameplayStop();S.win();
+ wins++;const tt=(performance.now()-levelStart)/1000;
+ if(!bestTime||tt<bestTime)bestTime=tt;
+ Plat.save('wins',wins);Plat.save('best',bestTime);
+ document.getElementById('w-time').textContent=T('win_time')+fmtT(tt);
+ drawUmaBig(document.getElementById('umaWin'),true);
+ document.getElementById('ov-win').classList.add('on');
+}
+function onLose(){
+ Plat.gameplayStop();S.lose();shake(true);
+ drawUmaBig(document.getElementById('umaLose'),false);
+ document.getElementById('ov-lose').classList.add('on');
+}
+function fmtT(s){const m=Math.floor(s/60),ss=Math.floor(s%60);return m+':' +(ss<10?'0':'')+ss;}
+let toastT=0;
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';toastT=2.4;}
+/* ---------- иконки (inline SVG, без внешних файлов) ---------- */
+const ICO={
+ sound:'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="%23CURRENT%"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" stroke="%23CURRENT%" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
+ sun:'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5" fill="%23CURRENT%"/><g stroke="%23CURRENT%" stroke-width="2" stroke-linecap="round"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.5 4.5l2 2M17.5 17.5l2 2M19.5 4.5l-2 2M6.5 17.5l-2 2"/></g></svg>',
+ moon:'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="%23CURRENT%"/></svg>',
+ back:'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="%23CURRENT%" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+ restart:'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66" stroke="%23CURRENT%" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M20 3v5h-5" stroke="%23CURRENT%" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
+function iconURL(name){
+ const dark=document.documentElement.dataset.theme==='dark';
+ const col=dark?'%237fd8ef':'%23175a70';
+ return ICO[name].split('%23CURRENT%').join(col);
+}
+function setIco(btn,name){
+ let im=btn.querySelector('img.ico');
+ if(!im){im=document.createElement('img');im.className='ico';im.alt='';btn.prepend(im);}
+ im.src=iconURL(name);im.draggable=false;
+}
+/* ---------- локализация статики ---------- */
+function paintStatic(){
+ const $=id=>document.getElementById(id);
+ document.documentElement.lang=LANG;
+ $('lang-lbl').textContent=T('lang_btn');
+ $('btn-lang').title=LANG==='ru'?'English':'Русский';
+ const theme=document.documentElement.dataset.theme;
+ setIco($('btn-theme'),theme==='dark'?'sun':'moon');
+ $('btn-theme').title=T(theme==='dark'?'theme_light':'theme_dark');
+ setIco($('btn-sound'),'sound');
+ $('btn-sound').classList.toggle('off',!sndOn);
+ $('btn-sound').title=T(sndOn?'sound_on':'sound_off');
+ setIco($('btn-back'),'back');
+ $('btn-back').title=T('back');
+ $('m-logo').textContent=LANG==='ru'?'АКВА-БУМ!':'AQUA BOOM!';
+ $('m-sub').textContent=LANG==='ru'?'СПАСТИ УМУ':'SAVE UMA';
+ $('b-play').textContent=T('play');
+ $('b-constructor').textContent=T('constructor');
+ $('b-help').textContent=T('help');
+ $('b-mods').textContent=T('mods');
+ $('mods-title').textContent=T('mods_title');
+ $('mods-sub').textContent=T('mods_sub');
+ $('mods-footer').textContent=T('ver');
+ $('m-ver').textContent=T('ver')+(bestTime?(' · best '+fmtT(bestTime)):'');
+ $('help-title').textContent=T('help_title');
+ $('help-body').innerHTML=T('help_html');
+ $('help-footer').textContent=T('ver');
+ $('dragHint').textContent=T(matchMedia('(pointer:coarse)').matches?'drag_touch':'drag_pc');
+ setIco($('btn-restart'),'restart');
+ $('btn-restart').title=T('restart');
+ $('freezeLbl').textContent=T('freeze');
+ $('btn-freeze').title=T('freeze');
+ $('bZoomOut').title=LANG==='ru'?'Уменьшить':'Zoom out';
+ $('bZoomIn').title=LANG==='ru'?'Увеличить':'Zoom in';
+ $('bReset').title=LANG==='ru'?'Сбросить вращение':'Reset rotation';
+ paintGateButton();paintConstructorUI();
+ $('p-title').textContent=T('pause');
+ $('p-resume').textContent=T('resume');
+ $('p-help').textContent=T('p_help');
+ $('p-exit').textContent=T('menu');
+ $('p-keys').textContent=T('keys');
+ $('w-title').textContent=T('win');
+ $('w-again').textContent=T('again');
+ $('w-next').textContent=T('next');
+ $('w-menu').textContent=T('menu');
+ $('w-reward').textContent=T('reward');
+ $('l-title').textContent=T('lose');
+ $('l-sub').textContent=T('lose_sub');
+ $('l-retry').textContent=T('retry');
+ $('l-menu').textContent=T('menu');
+ hintKey='';
+}
+function applyTheme(t){
+ document.documentElement.dataset.theme=t;
+ try{localStorage.setItem('aquaboom_theme',t);}catch(e){}
+ document.querySelector('meta[name=theme-color]').content=t==='dark'?'#081720':'#dfe9f2';
+ buildBG();paintStatic();
+}
+/* ---------- статистика техно-демо ---------- */
+function paintStats(){
+ const el=document.getElementById('stats');
+ el.hidden=!statOn;
+ if(!statOn)return;
+ const liq=ND.reduce((a,n)=>a+(n.type==='ice'?0:n.vol),0);
+ el.textContent='fps '+fpsE.toFixed(0)+'\n'+T('stat_draw')+' '+draws+
+  '\n'+T('stat_liq')+' '+(liq*1000|0)+' ml\n'+T('stat_rot')+' '+Math.round(2*Math.acos(Math.min(1,Math.abs(rot.q[3])))*180/Math.PI)+'°'+
+  '\nball: '+ND[ball.node].id+(ball.hurt?' !':'');
+}
+/* ================= главный цикл ====================================== */
+let lastT=0,acc=0,statT=0,dtFrame=1/60;
+function frame(ts){
+ requestAnimationFrame(frame);
+ const t=ts/1000;
+ let dt=Math.min(0.05,t-lastT||0.016);lastT=t;
+ dtFrame=dt;fps=1/dt;fpsE+= (fps-fpsE)*0.06;
+ if(toastT>0){toastT-=dt;if(toastT<=0)document.getElementById('toast').style.display='none';}
+ if(gameScreen()&&!paused){
+  if(W<4||H<4)resize();
+  /* инерция arcball: как внешний поворот сферы, без ограничений по углу */
+  if(!drag&&rot.speed>1e-4){
+   rot.q=qNormalize(qMultiply(qAxisAngle(rot.axis,rot.speed*dt),rot.q));
+   rot.speed*=Math.exp(-ROT_DAMP*Math.min(.25,dt));if(rot.speed<.015)rot.speed=0;
+  }
+  labYaw=qYaw(rot.q);
+  acc+=dt;let n=0;
+  while(acc>=1/SIM_HZ&&n<4){simStep(1/SIM_HZ);acc-=1/SIM_HZ;n++;}
+  if(acc>0.2)acc=0;
+  hitZones.length=0;
+  render(t);
+  updateHint(dt);
+  /* кольцо заморозки */
+  const fr=document.getElementById('freezeArc');
+  fr.setAttribute('stroke-dashoffset',(62.8*(1-freezeLeft/FREEZE_TIME)).toFixed(1));
+  document.getElementById('btn-freeze').classList.toggle('hot',freezeOn);
+  statT+=dt;if(statT>0.25){statT=0;paintStats();}
+ } else {
+  hitZones.length=0;
+ }
+}
+/* ================= пауза по потере фокуса (Y 1.3 / VK) ================ */
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden&&gameScreen()&&!paused)togglePause(true);
+ if(document.hidden&&AC)AC.suspend();
+ if(!document.hidden&&AC&&!paused)AC.resume();
+});
+addEventListener('blur',()=>{if(gameScreen()&&!paused)togglePause(true);});
+/* ================= провода UI ======================================== */
+function wireUI(){
+ const $=id=>document.getElementById(id);
+ $('btn-lang').addEventListener('click',()=>{setLang(lang()==='ru'?'en':'ru');paintStatic();S.click();});
+ $('btn-theme').addEventListener('click',()=>{applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');S.click();});
+ $('btn-sound').addEventListener('click',()=>{setSound(!sndOn);paintStatic();if(sndOn)S.sel();});
+ $('btn-back').addEventListener('click',()=>{S.click();
+  if(curScreen==='help'){showScreen(prevScreen);}
+  else if(curScreen==='mods'){showScreen('start');paintStatic();}
+  else if(curScreen==='constructor'){constructorMode=false;showScreen('start');paintStatic();}
+  else if(curScreen==='game'){togglePause(true);}
+ });
+ $('b-play').addEventListener('click',()=>{constructorMode=false;S.sel();showScreen('game');restart();});
+ $('b-constructor').addEventListener('click',()=>{S.sel();startConstructor();});
+ $('b-help').addEventListener('click',()=>{S.click();prevScreen=curScreen;showScreen('help');});
+ $('b-mods').addEventListener('click',()=>{S.sel();prevScreen=curScreen;showScreen('mods');});
+ $('p-resume').addEventListener('click',()=>{S.click();togglePause(false);});
+ $('p-help').addEventListener('click',()=>{S.click();prevScreen='game';showScreen('help');});
+ $('p-exit').addEventListener('click',()=>{S.click();togglePause(false);paused=false;
+  document.getElementById('ov-pause').classList.remove('on');Plat.gameplayStop();showScreen('start');paintStatic();});
+ $('ctor-back').addEventListener('click',()=>{S.click();constructorMode=false;paused=false;showScreen('start');Plat.gameplayStop();paintStatic();});
+ $('ctor-test').addEventListener('click',()=>{S.sel();constructorMode=false;constructorStatus='';showScreen('game');restart();});
+ $('ctor-clear').addEventListener('click',()=>clearConstructorAdditions());
+ document.querySelectorAll('[data-ctor-tool]').forEach(b=>b.addEventListener('click',()=>{
+  constructorTool=b.dataset.ctorTool;constructorStatus='';paintConstructorUI();S.click();
+ }));
+ document.querySelectorAll('[data-part]').forEach(b=>b.addEventListener('click',()=>{
+  constructorPart=b.dataset.part;constructorStatus='';paintConstructorUI();S.click();
+ }));
+ $('btn-restart').addEventListener('click',()=>{restart();});
+ $('btn-freeze').addEventListener('click',()=>{activateFreeze();});
+ $('w-again').addEventListener('click',()=>{S.click();restart();});
+ $('w-next').addEventListener('click',()=>{S.click();toast(T('next_soon'));});
+ $('w-menu').addEventListener('click',()=>{S.click();showScreen('start');paintStatic();});
+ $('l-retry').addEventListener('click',()=>{S.click();restart();});
+ $('l-menu').addEventListener('click',()=>{S.click();showScreen('start');paintStatic();});
+ $('stats').addEventListener('click',()=>{statOn=false;paintStats();});
+ $('bZoomOut').addEventListener('click',()=>{S.click();zoomStep(-1);});
+ $('bZoomIn').addEventListener('click',()=>{S.click();zoomStep(1);});
+ $('bGate').addEventListener('click',()=>toggleGatePlacement());
+ $('bReset').addEventListener('click',()=>{S.click();rot.q=[0,0,0,1];rot.axis=[0,1,0];rot.speed=0;labYaw=0;fitCamera(true);});
+}
+/* ================= экран «МОДУЛИ ТРУБ» (v0.5) ======================== */
+let modsState='water',modsBuilt=false;
+function renderMods(){
+ const $=id=>document.getElementById(id);
+ const dark=document.documentElement.dataset.theme==='dark';
+ if(!modsBuilt){
+  const bar=$('mods-bar');
+  PLIB.STATES.forEach(st=>{
+   const b=document.createElement('button');b.type='button';b.dataset.st=st;
+   b.innerHTML='<span class="dot" style="background:'+PLIB.STATE_COL[st]+'"></span>'+(LANG==='ru'?PLIB.STATE_RU[st]:PLIB.STATE_EN[st]);
+   b.addEventListener('click',()=>{S.click();modsState=st;renderMods();});
+   bar.appendChild(b);
+  });
+  const grid=$('mods-grid');
+  PLIB.MODULES.forEach(m=>{
+   const cell=document.createElement('div');cell.className='mod-cell';
+   const cv2=document.createElement('canvas');cv2.width=460;cv2.height=250;
+   cell.appendChild(cv2);
+   const nm=document.createElement('div');nm.className='mname';nm.textContent=m.ru+' · '+m.size;
+   const mm=document.createElement('div');mm.className='mmeta';mm.textContent=(m.en||m.id)+' · '+(LANG==='ru'?'портов':'ports')+': '+m.ports;
+   cell.appendChild(nm);cell.appendChild(mm);
+   cell._cv=cv2;cell._m=m;
+   grid.appendChild(cell);
+  });
+  modsBuilt=true;
+ }
+[...$('mods-bar').children].forEach(b=>b.classList.toggle('on',b.dataset.st===modsState));
+[...$('mods-grid').children].forEach(cell=>{
+  const g2=cell._cv.getContext('2d');
+  g2.clearRect(0,0,cell._cv.width,cell._cv.height);
+  let sc=190,wOut=46,wIn=35;
+  let geo=PLIB.modGeometry(cell._m.id,{scale:sc,wOut:wOut,wIn:wIn});
+  const k=Math.min(1,(cell._cv.width-60)/(geo.bb[2]-geo.bb[0]),(cell._cv.height-40)/(geo.bb[3]-geo.bb[1]));
+  sc*=k;wOut*=k;wIn*=k;
+  PLIB.drawModule(g2,cell._m.id,cell._cv.width/2,cell._cv.height/2,
+   {state:modsState,scale:sc,wOut:wOut,wIn:wIn,t:performance.now()/1000,dark:dark,seed:cell._m.id});
+ });
+}
+/* ================= старт ============================================= */
+(function init(){
+ try{const th=localStorage.getItem('aquaboom_theme');if(th==='dark'||th==='light')document.documentElement.dataset.theme=th;}catch(e){}
+ const al=Plat.lang();if(al&&al!==LANG&&(al==='en'||al==='ru'))setLang(al);
+ paintStatic();wireUI();resize();buildLevel();gameState='idle';
+ Plat.init();
+ requestAnimationFrame(frame);
+})();
+</script>
+
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a48fa4e61da4d17e',t:'MTc5MTc0MDM2NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
